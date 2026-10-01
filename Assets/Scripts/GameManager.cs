@@ -39,4 +39,34 @@ public class GameManager : MonoBehaviour
 
         Debug.Log("ターン終了！次は プレイヤー " + (currentPlayerIndex + 1) + " の番です。");
     }
+
+    public void RollDice()
+    {
+        // 1〜6のサイコロを2つ振る
+        int dice1 = Random.Range(1, 7);
+        int dice2 = Random.Range(1, 7);
+        int total = dice1 + dice2;
+
+        Debug.Log("=========================");
+        Debug.Log($"サイコロを振った！出目は 【 {total} 】 ({dice1} + {dice2})");
+
+        if (total == 7)
+        {
+            Debug.Log("盗賊が出た！誰も資源を獲得できません。");
+            return;
+        }
+
+        // ボード上のすべてのHexTileを探す
+        HexTile[] allHexes = FindObjectsOfType<HexTile>();
+        
+        foreach (HexTile hex in allHexes)
+        {
+            // 出目が一致していて、砂漠ではない場合
+            if (hex.number == total && hex.terrainType != TerrainType.Desert)
+            {
+                // そのHexに資源を配らせる
+                hex.DistributeResources();
+            }
+        }
+    }
 }

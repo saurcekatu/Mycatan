@@ -55,14 +55,23 @@ public class BoardGenerator : MonoBehaviour
                     hex.name = $"Hex_{q}_{r}_{s}";
                     hex.transform.SetParent(this.transform);
 
+                    HexTile hexLogic = hex.AddComponent<HexTile>();
+
                     TerrainType type = terrainDeck[tileIndex];
                     SetHexColor(hex, type);
+                    hexLogic.terrainType = type;
                     tileIndex++;
 
                     if (type != TerrainType.Desert)
                     {
-                        SpawnNumberToken(hex, numberDeck[numberIndex]);
+                        int num = numberDeck[numberIndex];
+                        SpawnNumberToken(hex, num);
+                        hexLogic.number = num; // 数字データを渡す
                         numberIndex++;
+                    }
+                    else
+                    {
+                        hexLogic.number = 7;// 砂漠は便宜上7にしておく
                     }
 
                     // 頂点の生成
