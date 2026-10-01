@@ -3,7 +3,7 @@ using UnityEngine;
 public class Intersection : MonoBehaviour
 {
     [Header("建設後のマテリアル（色）")]
-    public Material playerMaterial;
+    
 
     private Renderer myRenderer;
     private bool isBuilt = false;
@@ -45,7 +45,7 @@ public class Intersection : MonoBehaviour
     void BuildSettlement()
     {
         isBuilt = true;
-        myRenderer.material = playerMaterial;
+        myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
         Debug.Log(gameObject.name + " に開拓地を建設しました！");
     }

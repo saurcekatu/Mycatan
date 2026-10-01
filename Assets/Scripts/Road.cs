@@ -4,7 +4,7 @@ using UnityEngine;
 public class Road : MonoBehaviour
 {
     [Header("建設後のマテリアル（色）")]
-    public Material playerMaterial;
+    
 
     private Renderer myRenderer;
     private bool isBuilt = false;
@@ -41,7 +41,7 @@ public class Road : MonoBehaviour
     void BuildRoad()
     {
         isBuilt = true;
-        myRenderer.material = playerMaterial;
+        myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         // 道は形を変えずに色だけ変える
         Debug.Log(gameObject.name + " に道を建設しました！");
     }
