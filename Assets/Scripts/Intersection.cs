@@ -53,33 +53,26 @@ public class Intersection : MonoBehaviour
     {
         int currentPlayer = GameManager.Instance.currentPlayerIndex;
 
-        // ルール1：すでに建物がある場所には建てられない
-        if (ownerID != -1)
+        if (ownerID != -1) { Debug.Log("すでに建物があります！"); return; }
+        
+        foreach (Intersection node in adjacentNodes)
         {
-            Debug.Log("すでに建物があります！");
+            if (node.ownerID != -1) { Debug.Log("近隣の村と近すぎます！（距離ルール違反）"); return; }
+        }
+
+        // ▼▼▼ ここから追加・変更 ▼▼▼
+        // ルール3：コストの支払い（GameManagerに決済を依頼する）
+        if (!GameManager.Instance.TryPaySettlementCost())
+        {
+            // 支払いに失敗した場合は、ここで処理を中断する（建てられない）
             return;
         }
 
-        // ルール2：距離ルール（隣の交差点に、誰かの村があったらNG）
-        foreach (Intersection node in adjacentNodes)
-        {
-            if (node.ownerID != -1)
-            {
-                Debug.Log("近隣の村と近すぎます！（距離ルール違反）");
-                return;
-            }
-        }
-
-        /* 
-         * ※本来はここに「自分の道が繋がっているか」のチェックも入りますが、
-         * カタンの「ゲーム開始時の最初の2つの村」は道がなくても建てられるため、
-         * テストプレイが詰まらないように今回は道チェックを省略しています。
-         */
-
-        // 全ルールをクリアしたら建設！
+        // 決済に成功したら建設！
         ownerID = currentPlayer;
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
         Debug.Log(gameObject.name + " に建設しました！");
+        // ▲▲▲ ここまで ▲▲▲
     }
 }

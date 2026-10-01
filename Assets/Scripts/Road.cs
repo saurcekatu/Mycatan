@@ -46,34 +46,25 @@ public class Road : MonoBehaviour
     {
         int currentPlayer = GameManager.Instance.currentPlayerIndex;
 
-        // ルール1：すでに道がある場所には引けない
-        if (ownerID != -1)
-        {
-            Debug.Log("すでに道があります！");
-            return;
-        }
+        if (ownerID != -1) { Debug.Log("すでに道があります！"); return; }
 
-        // ルール2：接続ルール（自分の村、または自分の道に繋がっているか）
         bool isConnected = false;
+        foreach (Intersection node in connectedNodes) { if (node.ownerID == currentPlayer) isConnected = true; }
+        foreach (Road road in connectedRoads) { if (road.ownerID == currentPlayer) isConnected = true; }
+        
+        if (!isConnected) { Debug.Log("自分の村や道に繋がっていません！"); return; }
 
-        foreach (Intersection node in connectedNodes)
+        // ▼▼▼ ここから追加・変更 ▼▼▼
+        // ルール3：コストの支払い（GameManagerに決済を依頼する）
+        if (!GameManager.Instance.TryPayRoadCost())
         {
-            if (node.ownerID == currentPlayer) isConnected = true;
-        }
-        foreach (Road road in connectedRoads)
-        {
-            if (road.ownerID == currentPlayer) isConnected = true;
-        }
-
-        if (!isConnected)
-        {
-            Debug.Log("自分の村や道に繋がっていません！");
-            return;
+            return; // 支払い失敗で中断
         }
 
-        // 全ルールをクリアしたら建設！
+        // 決済に成功したら建設！
         ownerID = currentPlayer;
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         Debug.Log(gameObject.name + " に道を引きました！");
+        // ▲▲▲ ここまで ▲▲▲
     }
 }
