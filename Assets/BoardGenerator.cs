@@ -2,27 +2,23 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 
-// 1. 地形（資源）の種類を定義
-public enum TerrainType
-{
-    Desert,   // 砂漠（資源なし）
-    Forest,   // 森（木）
-    Hill,     // 丘（レンガ）
-    Pasture,  // 牧草地（羊）
-    Field,    // 畑（麦）
-    Mountain  // 山（鉄）
-}
+public enum TerrainType { Desert, Forest, Hill, Pasture, Field, Mountain }
 
 public class BoardGenerator : MonoBehaviour
 {
-    [Header("六角形のプレハブ")]
+    [Header("プレハブ設定")]
     public GameObject hexPrefab;
-
-    [Header("数字トークンのプレハブ")]
     public GameObject numberTokenPrefab;
+    // 【追加】交差点（Node）のプレハブ
+    public GameObject intersectionNodePrefab;
 
-    [Header("六角形のサイズ（中心から頂点までの距離）")]
+    [Header("ボード設定")]
     public float hexRadius = 0.52f;
+    // 【追加】生成したNodeをまとめる親オブジェクト
+    public Transform nodesContainer;
+
+    // 【追加】生成済みのNodeの座標を記録するリスト（重複排除用）
+    private List<Vector3> createdNodes = new List<Vector3>();
 
     void Start()
     {
@@ -36,15 +32,12 @@ public class BoardGenerator : MonoBehaviour
         float hexHeight = 2.0f * hexRadius;
         float verticalSpacing = hexHeight * 0.75f;
 
-        // 2. 地形のリスト（山札）を作成してシャッフルする
         List<TerrainType> terrainDeck = GetStandardTerrainDeck();
         ShuffleDeck(terrainDeck);
-
-        //数字トークンの山札
         List<int> numberDeck = GetStandardNumberTokens();
         ShuffleDeck(numberDeck);
 
-        int tileIndex = 0; // 山札から引くためのインデックス
+        int tileIndex = 0;
         int numberIndex = 0;
 
         for (int row = 0; row < rowLengths.Length; row++)
@@ -57,95 +50,67 @@ public class BoardGenerator : MonoBehaviour
                 float xPos = xOffset + col * hexWidth;
                 float zPos = -row * verticalSpacing;
 
-                Vector3 pos = new Vector3(xPos, 0, zPos);
-                GameObject hex = Instantiate(hexPrefab, pos, Quaternion.identity);
+                Vector3 hexPos = new Vector3(xPos, 0, zPos);
+                GameObject hex = Instantiate(hexPrefab, hexPos, Quaternion.identity);
                 hex.name = $"Hex_{row}_{col}";
                 hex.transform.SetParent(this.transform);
 
-                // 3. タイルに地形データを割り当てて、色を変える
                 TerrainType type = terrainDeck[tileIndex];
                 SetHexColor(hex, type);
 
-                //砂漠以外ならnumトークン配置
-                if (type !=TerrainType.Desert)
+                if (type != TerrainType.Desert)
                 {
                     int num = numberDeck[numberIndex];
                     SpawnNumberToken(hex, num);
                     numberIndex++;
                 }
 
+                // 【追加】この六角形の6つの頂点にNodeを生成する
+                GenerateIntersectionNodes(hexPos);
+
                 tileIndex++;
             }
         }
     }
 
-    // --- カタン標準の19枚の地形リストを作成するメソッド ---
-    List<TerrainType> GetStandardTerrainDeck()
-    {
-        List<TerrainType> deck = new List<TerrainType>();
-        deck.Add(TerrainType.Desert);
-        for (int i = 0; i < 4; i++) deck.Add(TerrainType.Forest);
-        for (int i = 0; i < 3; i++) deck.Add(TerrainType.Hill);
-        for (int i = 0; i < 4; i++) deck.Add(TerrainType.Pasture);
-        for (int i = 0; i < 4; i++) deck.Add(TerrainType.Field);
-        for (int i = 0; i < 3; i++) deck.Add(TerrainType.Mountain);
-        return deck;
-    }
+    // （以下の GetStandardTerrainDeck, GetStandardNumberTokens, ShuffleDeck, SetHexColor, SpawnNumberToken は前回と同じなので省略せずにそのまま残してください。文字数制限のため省略表示しています）
+    List<TerrainType> GetStandardTerrainDeck() { /* 前回と同じ */ return new List<TerrainType> { TerrainType.Desert, TerrainType.Forest, TerrainType.Forest, TerrainType.Forest, TerrainType.Forest, TerrainType.Hill, TerrainType.Hill, TerrainType.Hill, TerrainType.Pasture, TerrainType.Pasture, TerrainType.Pasture, TerrainType.Pasture, TerrainType.Field, TerrainType.Field, TerrainType.Field, TerrainType.Field, TerrainType.Mountain, TerrainType.Mountain, TerrainType.Mountain }; }
+    List<int> GetStandardNumberTokens() { /* 前回と同じ */ return new List<int> { 2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12 }; }
+    void ShuffleDeck<T>(List<T> deck) { /* 前回と同じ */ for (int i = 0; i < deck.Count; i++) { T temp = deck[i]; int randomIndex = Random.Range(i, deck.Count); deck[i] = deck[randomIndex]; deck[randomIndex] = temp; } }
+    void SetHexColor(GameObject hex, TerrainType type) { /* 前回と同じ */ Renderer renderer = hex.GetComponent<Renderer>(); if (renderer == null) return; switch (type) { case TerrainType.Desert: renderer.material.color = new Color(0.9f, 0.8f, 0.5f); break; case TerrainType.Forest: renderer.material.color = new Color(0.1f, 0.5f, 0.2f); break; case TerrainType.Hill: renderer.material.color = new Color(0.8f, 0.4f, 0.1f); break; case TerrainType.Pasture: renderer.material.color = new Color(0.5f, 0.8f, 0.2f); break; case TerrainType.Field: renderer.material.color = new Color(0.9f, 0.8f, 0.2f); break; case TerrainType.Mountain: renderer.material.color = new Color(0.5f, 0.5f, 0.5f); break; } }
+    void SpawnNumberToken(GameObject hex, int number) { /* 前回と同じ */ Vector3 tokenPos = hex.transform.position + new Vector3(0, 0.05f, 0); GameObject token = Instantiate(numberTokenPrefab, tokenPos, Quaternion.identity); token.transform.SetParent(hex.transform); TextMeshPro textMeshPro = token.GetComponentInChildren<TextMeshPro>(); if (textMeshPro != null) { textMeshPro.text = number.ToString(); if (number == 6 || number == 8) { textMeshPro.color = Color.red; } else { textMeshPro.color = Color.black; } } }
 
-    List<int> GetStandardNumberTokens()
+    // 【新規追加】六角形の6つの頂点を計算してNodeを置くメソッド
+    void GenerateIntersectionNodes(Vector3 hexCenter)
     {
-        return new List<int> {2,3,3,4,4,5,5,6,6,8,8,9,9,10,10,11,11,12};
-    }
-
-    // --- リストをランダムにシャッフルするメソッド ---
-    void ShuffleDeck<T>(List<T> deck)
-    {
-        for (int i = 0; i < deck.Count; i++)
+        // 六角形の6つの頂点の角度（Pointy-top型は30度からスタート）
+        for (int i = 0; i < 6; i++)
         {
-            T temp = deck[i];
-            int randomIndex = Random.Range(i, deck.Count);
-            deck[i] = deck[randomIndex];
-            deck[randomIndex] = temp;
-        }
-    }
+            float angle_deg = 60 * i - 30;
+            float angle_rad = Mathf.PI / 180 * angle_deg;
 
-    // --- 地形に合わせてタイルの色を変更するメソッド ---
-    void SetHexColor(GameObject hex, TerrainType type)
-    {
-        // タイルの見た目（Renderer）を取得
-        Renderer renderer = hex.GetComponent<Renderer>();
-        if (renderer == null) return;
+            // 頂点のX, Z座標を計算（少しだけ大きくしてタイルの外側に置く）
+            float x = hexCenter.x + hexRadius * Mathf.Cos(angle_rad);
+            float z = hexCenter.z + hexRadius * Mathf.Sin(angle_rad);
+            Vector3 nodePos = new Vector3(x, 0.1f, z); // 0.1f浮かす
 
-        // 地形に合わせて色（RGB値）を変える
-        switch (type)
-        {
-            case TerrainType.Desert:   renderer.material.color = new Color(0.9f, 0.8f, 0.5f); break; // 砂色
-            case TerrainType.Forest:   renderer.material.color = new Color(0.1f, 0.5f, 0.2f); break; // 濃い緑
-            case TerrainType.Hill:     renderer.material.color = new Color(0.8f, 0.4f, 0.1f); break; // 赤茶色
-            case TerrainType.Pasture:  renderer.material.color = new Color(0.5f, 0.8f, 0.2f); break; // 黄緑
-            case TerrainType.Field:    renderer.material.color = new Color(0.9f, 0.8f, 0.2f); break; // 黄金色
-            case TerrainType.Mountain: renderer.material.color = new Color(0.5f, 0.5f, 0.5f); break; // 灰色
-        }
-    }
-
-    void SpawnNumberToken(GameObject hex, int number)
-    {
-        Vector3 tokenPos = hex.transform.position + new Vector3(0, 0.05f, 0);
-        GameObject token = Instantiate(numberTokenPrefab, tokenPos, Quaternion.identity);
-        token.transform.SetParent(hex.transform);
-
-        TextMeshPro textMeshPro = token.GetComponentInChildren<TextMeshPro>();
-        if (textMeshPro != null)
-        {
-            textMeshPro.text = number.ToString();
-
-            if (number == 6 || number == 8)
+            // すでに同じ場所にNodeが存在するかチェックする（誤差0.1を許容）
+            bool isDuplicate = false;
+            foreach (Vector3 existingPos in createdNodes)
             {
-                textMeshPro.color = Color.red;
+                if (Vector3.Distance(existingPos, nodePos) < 0.1f)
+                {
+                    isDuplicate = true;
+                    break;
+                }
             }
-            else
+
+            // 重複していなければNodeを生成
+            if (!isDuplicate)
             {
-                textMeshPro.color = Color.black;
+                GameObject node = Instantiate(intersectionNodePrefab, nodePos, Quaternion.identity);
+                node.transform.SetParent(nodesContainer);
+                createdNodes.Add(nodePos); // 記録に追加
             }
         }
     }
