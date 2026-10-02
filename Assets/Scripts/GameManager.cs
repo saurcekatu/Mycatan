@@ -215,7 +215,7 @@ public class GameManager : MonoBehaviour
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
         int vp = players[currentPlayerIndex].victoryPoints; // 現在の得点を取得
         // 画面に表示する文字列を組み立てる
-        string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】\n";
+        string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】★現在: {vp}点 / 10点\n";
         uiText += $"木: {inv[ResourceType.Wood]}  |  ";
         uiText += $"レンガ: {inv[ResourceType.Brick]}  |  ";
         uiText += $"麦: {inv[ResourceType.Grain]}  |  ";
