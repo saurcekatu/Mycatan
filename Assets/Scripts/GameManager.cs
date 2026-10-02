@@ -32,6 +32,14 @@ public class GameManager : MonoBehaviour
     [Header("UI設定")]
     public TextMeshProUGUI resourceText; 
 
+    [Header("盗賊システム")]
+    public GameObject robberPrefab;
+    private GameObject robberInstance; // 画面にいる盗賊の実体
+    public HexTile currentRobberHex;   // 今盗賊がいるタイル
+    public bool isWaitingForRobber = false; // 盗賊の移動先をクリック待ちか
+    
+    private HexTile[] allHexes;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -40,7 +48,30 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        UpdateUI(); // ゲーム開始時に画面の文字を更新する
+        UpdateUI(); 
+        // ゲーム開始時に1回だけ、ボード上の全タイルを探して記憶しておく
+        allHexes = FindObjectsByType<HexTile>(FindObjectsSortMode.None);
+
+        // 【追加】ボードが生成された直後に、砂漠を探して盗賊を配置する
+        Invoke("InitializeRobber", 0.1f);
+    }
+
+    // 【新規メソッド追加】砂漠を探して初期配置する
+    void InitializeRobber()
+    {
+        HexTile[] allHexes = FindObjectsOfType<HexTile>();
+        foreach(HexTile hex in allHexes) 
+        {
+            if (hex.terrainType == TerrainType.Desert) 
+            {
+                currentRobberHex = hex;
+                hex.hasRobber = true;
+                // タイルの少し上に盗賊を出現させる
+                Vector3 pos = hex.transform.position + new Vector3(0, 0.2f, 0);
+                robberInstance = Instantiate(robberPrefab, pos, Quaternion.identity);
+                break;
+            }
+        }
     }
 
     public Material GetCurrentPlayerMaterial()
@@ -59,18 +90,24 @@ public class GameManager : MonoBehaviour
 
     public void RollDice()
     {
+        //盗賊待ちでサイコロをはじく
+        if (isWaitingForRobber)
+        {
+            Debug.Log("【警告】先にタイルをクリックして、盗賊を移動させてください！");
+            return; 
+        }
         int dice1 = Random.Range(1, 7);
         int dice2 = Random.Range(1, 7);
         int total = dice1 + dice2;
 
         if (total == 7)
         {
-            Debug.Log("盗賊が出た！誰も資源を獲得できません。");
+            Debug.Log("盗賊が出た！移動させるタイルをクリックしてください。");
+            isWaitingForRobber = true; // クリック待ちモードON
             return;
         }
 
-        HexTile[] allHexes = FindObjectsOfType<HexTile>();
-        foreach (HexTile hex in allHexes)
+        HexTile[] allHexes = FindObjectsByType<HexTile>(FindObjectsSortMode.None);        foreach (HexTile hex in allHexes)
         {
             if (hex.number == total && hex.terrainType != TerrainType.Desert)
             {
@@ -163,5 +200,107 @@ public class GameManager : MonoBehaviour
 
         // 実際の画面の文字を書き換える
         resourceText.text = uiText;
+    }
+
+    // 【新規追加】毎フレーム、クリックを監視する
+    void Update()
+    {
+        // 盗賊移動待ちの時に、画面をクリックしたら
+        if (isWaitingForRobber && Input.GetMouseButtonDown(0))
+        {
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (Physics.Raycast(ray, out RaycastHit hit))
+            {
+                // クリックしたのが HexTile だったら
+                HexTile clickedHex = hit.transform.GetComponent<HexTile>();
+                if (clickedHex != null)
+                {
+                    MoveRobber(clickedHex);
+                }
+            }
+        }
+    }
+
+    // 【新規追加】盗賊を新しいタイルに移動させる処理
+    void MoveRobber(HexTile targetHex)
+    {
+        // ルール：今いる場所には移動できない
+        if (targetHex == currentRobberHex)
+        {
+            Debug.Log("同じ場所には移動できません！別のタイルを選んでください。");
+            return;
+        }
+
+        // 古いタイルの盗賊フラグを解除
+        if (currentRobberHex != null) currentRobberHex.hasRobber = false;
+
+        // 新しいタイルの盗賊フラグをON
+        currentRobberHex = targetHex;
+        currentRobberHex.hasRobber = true;
+
+        // コマを物理的に移動させる
+        robberInstance.transform.position = targetHex.transform.position + new Vector3(0, 0.2f, 0);
+
+        isWaitingForRobber = false; // クリック待ちモード終了
+        Debug.Log("盗賊を移動しました！");
+
+        List<int> victims = new List<int>(); // 被害者リスト
+
+        // 移動先のタイルの周囲にある交差点をすべてチェック
+        foreach (Intersection node in targetHex.adjacentNodes)
+        {
+            // 誰かの村があり、かつ「今のプレイヤー（自分）」ではない場合
+            if (node.ownerID != -1 && node.ownerID != currentPlayerIndex)
+            {
+                // まだリストに入っていなければ被害者として追加
+                if (!victims.Contains(node.ownerID)) victims.Add(node.ownerID);
+            }
+        }
+
+        // 被害者が1人以上いる場合
+        if (victims.Count > 0)
+        {
+            // 誰から奪うかランダムで1人決める（※本来はプレイヤーが選びますが今回は自動化）
+            int targetVictim = victims[Random.Range(0, victims.Count)];
+            StealResource(currentPlayerIndex, targetVictim);
+        }
+        else
+        {
+            Debug.Log("周囲に他のプレイヤーの村がないため、誰も襲えませんでした。");
+        }
+        // ▲▲▲ ここまで追加 ▲▲▲
+    }
+
+    // 【新規追加】実際にAさんがBさんから資源を1つ奪うメソッド
+    void StealResource(int thief, int victim)
+    {
+        PlayerData vData = players[victim];
+        List<ResourceType> availableResources = new List<ResourceType>();
+
+        // 被害者のインベントリの中身をすべて「くじ引きの箱」に入れる
+        foreach (var item in vData.inventory)
+        {
+            for (int i = 0; i < item.Value; i++)
+            {
+                availableResources.Add(item.Key); // 例：木が3つなら、Woodを3枚入れる
+            }
+        }
+
+        if (availableResources.Count > 0)
+        {
+            // くじ引きの箱からランダムに1枚引く
+            ResourceType stolen = availableResources[Random.Range(0, availableResources.Count)];
+            
+            // 被害者から1つ減らし、泥棒に1つ足す
+            vData.inventory[stolen]--;
+            players[thief].inventory[stolen]++;
+            
+            Debug.Log($"【強奪】プレイヤー {thief + 1} は、プレイヤー {victim + 1} から 『{stolen}』 を1つ奪った！");
+            UpdateUI(); // 画面の数値を更新
+        }
+        else
+        {
+            Debug.Log($"プレイヤー {victim + 1} は資源を持っていなかった！");
+        }
     }
 }
