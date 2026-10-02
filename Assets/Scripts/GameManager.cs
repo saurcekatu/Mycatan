@@ -130,6 +130,7 @@ public class GameManager : MonoBehaviour
 
         players[playerIndex].inventory[res] += amount;
         UpdateUI(); // 資源が増えたので文字を更新
+        Debug.Log($"プレイヤー {playerIndex + 1} が {res} を獲得！ (現在の所持数: {players[playerIndex].inventory[res]} 個)");
     }
 
     private ResourceType ConvertTerrainToResource(TerrainType terrain)
@@ -176,6 +177,24 @@ public class GameManager : MonoBehaviour
         return false; 
     }
 
+    // 【追加】都市（City）のコストが支払えるか確認し、可能なら支払う
+    public bool TryPayCityCost()
+    {
+        Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
+
+        // 鉄3、麦2 があるかチェック
+        if (inv[ResourceType.Ore] >= 3 && inv[ResourceType.Grain] >= 2)
+        {
+            inv[ResourceType.Ore] -= 3;
+            inv[ResourceType.Grain] -= 2;
+            UpdateUI(); 
+            return true;
+        }
+
+        Debug.Log("資源が足りません！（都市：鉄3, 麦2 が必要です）");
+        return false;
+    }
+
     // 正しい位置に配置されたチートメソッド
     public void CheatGiveResources() 
     {
@@ -184,7 +203,8 @@ public class GameManager : MonoBehaviour
         players[p].inventory[ResourceType.Brick] += 10;
         players[p].inventory[ResourceType.Grain] += 10;
         players[p].inventory[ResourceType.Wool] += 10;
-        
+        players[p].inventory[ResourceType.Ore] += 10;
+
         UpdateUI(); // チートで資源が増えたので文字を更新
         Debug.Log("チートにより資源を獲得しました。");
     }

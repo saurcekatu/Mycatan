@@ -5,6 +5,7 @@ public class Intersection : MonoBehaviour
 {
     // 誰の建物か（-1は空き地、0〜3は各プレイヤー）
     public int ownerID = -1; 
+    public bool isCity = false; // ← 【追加】都市化されているかどうかのフラグ
     private Renderer myRenderer;
 
     // --- グラフ（隣接リスト） ---
@@ -53,6 +54,25 @@ public class Intersection : MonoBehaviour
     {
         int currentPlayer = GameManager.Instance.currentPlayerIndex;
 
+        // 【追加】ルールA：すでに自分の村なら、都市へのアップグレードを試みる
+        if (ownerID == currentPlayer && !isCity)
+        {
+            if (GameManager.Instance.TryPayCityCost())
+            {
+                isCity = true; // 都市フラグをON
+                
+                // 見た目を大きくする（本来はモデルを差し替えますが、今回はサイズで表現）
+                transform.localScale = new Vector3(0.5f, 0.6f, 0.5f); 
+                
+                // すでに村で1点もらっているので、「+1点」して合計2点にする
+                GameManager.Instance.AddVictoryPoint(currentPlayer); 
+                
+                Debug.Log(gameObject.name + " を『都市』にアップグレードしました！");
+            }
+            return;
+        }
+
+        // ここから下は既存の「開拓地（村）を建てる」処理
         if (ownerID != -1) { Debug.Log("すでに建物があります！"); return; }
         
         foreach (Intersection node in adjacentNodes)
@@ -60,22 +80,12 @@ public class Intersection : MonoBehaviour
             if (node.ownerID != -1) { Debug.Log("近隣の村と近すぎます！（距離ルール違反）"); return; }
         }
 
-        // ▼▼▼ ここから追加・変更 ▼▼▼
-        // ルール3：コストの支払い（GameManagerに決済を依頼する）
-        if (!GameManager.Instance.TryPaySettlementCost())
-        {
-            // 支払いに失敗した場合は、ここで処理を中断する（建てられない）
-            return;
-        }
+        if (!GameManager.Instance.TryPaySettlementCost()) return;
 
-        // 決済に成功したら建設！
         ownerID = currentPlayer;
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
         Debug.Log(gameObject.name + " に建設しました！");
-        
-        // 村を建てたので、現在のプレイヤーに勝利点を1点追加する
         GameManager.Instance.AddVictoryPoint(currentPlayer);
-
     }
 }

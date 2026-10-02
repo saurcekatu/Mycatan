@@ -33,13 +33,15 @@ public class HexTile : MonoBehaviour
         // 【追加】「誰かに資源を配ったか？」を記録するフラグ
         bool resourceGiven = false;
 
-        foreach (Intersection node in adjacentNodes)
+       foreach (Intersection node in adjacentNodes)
         {
-            // 周囲の交差点に誰かの村があったら
             if (node.ownerID != -1) 
             {
-                GameManager.Instance.AddResource(node.ownerID, terrainType, 1);
-                resourceGiven = true; // 配った記録を残す
+                // 【変更】都市(isCity)なら2個、村なら1個配るようにする
+                int amount = node.isCity ? 2 : 1;
+                
+                GameManager.Instance.AddResource(node.ownerID, terrainType, amount);
+                resourceGiven = true; 
             }
         }
 
