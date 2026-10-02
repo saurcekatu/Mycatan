@@ -73,6 +73,9 @@ public class Intersection : MonoBehaviour
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
         Debug.Log(gameObject.name + " に建設しました！");
-        // ▲▲▲ ここまで ▲▲▲
+        
+        // 村を建てたので、現在のプレイヤーに勝利点を1点追加する
+        GameManager.Instance.AddVictoryPoint(currentPlayer);
+
     }
 }

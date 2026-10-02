@@ -6,6 +6,8 @@ public enum ResourceType { None, Wood, Brick, Wool, Grain, Ore }
 
 public class PlayerData
 {
+    public int victoryPoints = 0;
+    
     public Dictionary<ResourceType, int> inventory = new Dictionary<ResourceType, int>()
     {
         { ResourceType.Wood, 0 },
@@ -19,6 +21,9 @@ public class PlayerData
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
+
+    [Header("ゲーム状態")]
+    public bool isGameOver = false; // ゲーム終了判定フラグ
 
     [Header("プレイヤーの色設定")]
     public Material[] playerMaterials;
@@ -81,6 +86,7 @@ public class GameManager : MonoBehaviour
 
     public void EndTurn()
     {
+        if (isGameOver) return;
         currentPlayerIndex++;
         if (currentPlayerIndex >= playerMaterials.Length) currentPlayerIndex = 0;
         
@@ -90,6 +96,7 @@ public class GameManager : MonoBehaviour
 
     public void RollDice()
     {
+        if (isGameOver) return;
         //盗賊待ちでサイコロをはじく
         if (isWaitingForRobber)
         {
@@ -182,6 +189,23 @@ public class GameManager : MonoBehaviour
         Debug.Log("チートにより資源を獲得しました。");
     }
 
+    // 【新規追加】勝利点を追加し、10点に達したかチェックするメソッド
+    public void AddVictoryPoint(int playerIndex)
+    {
+        players[playerIndex].victoryPoints++; // 1点追加
+        UpdateUI();
+
+        // 10点に到達したかチェック
+        if (players[playerIndex].victoryPoints >= 10)
+        {
+            isGameOver = true; // ゲーム終了状態にする
+            
+            Debug.Log("===============================================");
+            Debug.Log($"🎉【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！🎉");
+            Debug.Log("===============================================");
+        }
+    }
+
     // 【新規】画面の文字（UI）を現在の状況に合わせて書き換えるメソッド
     public void UpdateUI()
     {
@@ -189,7 +213,7 @@ public class GameManager : MonoBehaviour
         if (resourceText == null) return;
 
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
-        
+        int vp = players[currentPlayerIndex].victoryPoints; // 現在の得点を取得
         // 画面に表示する文字列を組み立てる
         string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】\n";
         uiText += $"木: {inv[ResourceType.Wood]}  |  ";
