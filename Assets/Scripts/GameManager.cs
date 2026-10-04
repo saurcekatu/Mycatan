@@ -4,6 +4,11 @@ using TMPro; // 【追加】UI（文字）を操作するために必要
 
 public enum ResourceType { None, Wood, Brick, Wool, Grain, Ore }
 
+// 【追加】発展カードの種類（騎士、勝利点、収穫、独占、街道建設）
+public enum DevCardType { Knight, VictoryPoint, YearOfPlenty, Monopoly, RoadBuilding }
+
+
+
 public class PlayerData
 {
     public int victoryPoints = 0;
@@ -15,6 +20,15 @@ public class PlayerData
         { ResourceType.Wool, 0 },
         { ResourceType.Grain, 0 },
         { ResourceType.Ore, 0 }
+    };
+    //発展カードの所持数
+    public Dictionary<DevCardType, int> devCards = new Dictionary<DevCardType, int>()
+    {
+        { DevCardType.Knight, 0 },
+        { DevCardType.VictoryPoint, 0 },
+        { DevCardType.YearOfPlenty, 0 },
+        { DevCardType.Monopoly, 0 },
+        { DevCardType.RoadBuilding, 0 }
     };
 }
 
@@ -42,14 +56,40 @@ public class GameManager : MonoBehaviour
     private GameObject robberInstance; // 画面にいる盗賊の実体
     public HexTile currentRobberHex;   // 今盗賊がいるタイル
     public bool isWaitingForRobber = false; // 盗賊の移動先をクリック待ちか
-    
-    private HexTile[] allHexes;
+
+    // 既存の変数の下あたりに追加
+    [Header("発展カード")]
+    public List<DevCardType> devCardDeck = new List<DevCardType>();
 
     void Awake()
     {
         if (Instance == null) Instance = this;
         for (int i = 0; i < 4; i++) players[i] = new PlayerData();
+        
+        InitializeDevCardDeck();
     }
+
+    // 【新規追加】山札を構築してシャッフルするメソッド
+    void InitializeDevCardDeck()
+    {
+        // カタンの標準的な構成（全25枚）
+        for(int i=0; i<14; i++) devCardDeck.Add(DevCardType.Knight);
+        for(int i=0; i<5; i++) devCardDeck.Add(DevCardType.VictoryPoint);
+        for(int i=0; i<2; i++) devCardDeck.Add(DevCardType.YearOfPlenty);
+        for(int i=0; i<2; i++) devCardDeck.Add(DevCardType.Monopoly);
+        for(int i=0; i<2; i++) devCardDeck.Add(DevCardType.RoadBuilding);
+
+        // データサイエンスの定番「Fisher-Yates シャッフル」でランダムに並び替える
+        for (int i = 0; i < devCardDeck.Count; i++)
+        {
+            DevCardType temp = devCardDeck[i];
+            int randomIndex = Random.Range(i, devCardDeck.Count);
+            devCardDeck[i] = devCardDeck[randomIndex];
+            devCardDeck[randomIndex] = temp;
+        }
+    }
+    
+    private HexTile[] allHexes;
 
     void Start()
     {
@@ -345,6 +385,51 @@ public class GameManager : MonoBehaviour
         else
         {
             Debug.Log($"プレイヤー {victim + 1} は資源を持っていなかった！");
+        }
+    }
+
+    // 【新規追加】発展カードを購入する処理
+    public void BuyDevelopmentCard()
+    {
+        if (devCardDeck.Count == 0)
+        {
+            Debug.Log("発展カードの山札がもうありません！");
+            return;
+        }
+
+        Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
+
+        // 鉄1、麦1、羊1があるかチェック
+        if (inv[ResourceType.Ore] >= 1 && inv[ResourceType.Grain] >= 1 && inv[ResourceType.Wool] >= 1)
+        {
+            // 支払い
+            inv[ResourceType.Ore] -= 1;
+            inv[ResourceType.Grain] -= 1;
+            inv[ResourceType.Wool] -= 1;
+
+            // 山札の先頭（0番目）からカードを引き、山札から削除する
+            DevCardType drawnCard = devCardDeck[0];
+            devCardDeck.RemoveAt(0);
+
+            // 引いたカードを手札に追加
+            players[currentPlayerIndex].devCards[drawnCard]++;
+            
+            // 勝利点カードなら、引いた瞬間に点数を追加してしまう（今回はシンプル化のため）
+            if (drawnCard == DevCardType.VictoryPoint)
+            {
+                AddVictoryPoint(currentPlayerIndex);
+                Debug.Log($"プレイヤー {currentPlayerIndex + 1} は『勝利点』カードを引いた！(現在: {players[currentPlayerIndex].victoryPoints}点)");
+            }
+            else
+            {
+                Debug.Log($"プレイヤー {currentPlayerIndex + 1} は『{drawnCard}』カードを引いた！");
+            }
+
+            UpdateUI();
+        }
+        else
+        {
+            Debug.Log("資源が足りません！（発展カード：鉄1, 麦1, 羊1 が必要です）");
         }
     }
 }
