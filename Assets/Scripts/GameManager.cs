@@ -12,6 +12,7 @@ public enum DevCardType { Knight, VictoryPoint, YearOfPlenty, Monopoly, RoadBuil
 public class PlayerData
 {
     public int victoryPoints = 0;
+    public int playedKnights = 0;
     
     public Dictionary<ResourceType, int> inventory = new Dictionary<ResourceType, int>()
     {
@@ -60,6 +61,10 @@ public class GameManager : MonoBehaviour
     // 既存の変数の下あたりに追加
     [Header("発展カード")]
     public List<DevCardType> devCardDeck = new List<DevCardType>();
+
+    [Header("特別称号")]
+    public int playerWithLargestArmy = -1;  // 現在の「最大騎士力」保持者(-1は誰もいない)
+    public int currentLargestArmyCount = 2;
 
     void Awake()
     {
@@ -282,6 +287,9 @@ public class GameManager : MonoBehaviour
         uiText += $"羊: {inv[ResourceType.Wool]}  |  ";
         uiText += $"鉄: {inv[ResourceType.Ore]}";
 
+        int knights = players[currentPlayerIndex].devCards[DevCardType.Knight];
+        int playedKnights = players[currentPlayerIndex].playedKnights; 
+        uiText += $"\n【手札】騎士カード: {knights} 枚 (使用済み: {playedKnights} 枚)";
         // 実際の画面の文字を書き換える
         resourceText.text = uiText;
     }
@@ -430,6 +438,71 @@ public class GameManager : MonoBehaviour
         else
         {
             Debug.Log("資源が足りません！（発展カード：鉄1, 麦1, 羊1 が必要です）");
+        }
+    }
+
+    // 【新規追加】騎士カードを使用する処理
+    public void UseKnightCard()
+    {
+        // 既にサイコロで7を出して移動待ちの場合は使えないようにする
+        if (isWaitingForRobber) 
+        {
+            Debug.Log("現在はすでに盗賊の移動待ちです！");
+            return;
+        }
+
+        // 現在のプレイヤーが騎士カードを1枚以上持っているかチェック
+        if (players[currentPlayerIndex].devCards[DevCardType.Knight] > 0)
+        {
+            // 騎士カードを1枚消費する
+            players[currentPlayerIndex].devCards[DevCardType.Knight]--;
+
+            // ▼▼▼ 魔法の1行！これだけで盗賊モードに突入します ▼▼▼
+            isWaitingForRobber = true; 
+            players[currentPlayerIndex].playedKnights++; // 使った回数を増やす
+            CheckLargestArmy(currentPlayerIndex);
+            Debug.Log($"⚔️ プレイヤー {currentPlayerIndex + 1} が【騎士カード】を使用しました！移動させるタイルをクリックしてください。");
+            UpdateUI();
+        }
+        else
+        {
+            Debug.Log("騎士カードを持っていません！");
+        }
+    }
+
+    // 【新規追加】最大騎士力の条件を満たしたかチェックする
+    public void CheckLargestArmy(int playerIndex)
+    {
+        int playedCount = players[playerIndex].playedKnights;
+
+        // 現在の最大記録を「単独で」上回った場合（同数は奪えない）
+        if (playedCount > currentLargestArmyCount)
+        {
+            currentLargestArmyCount = playedCount; // 記録更新
+
+            // もし称号の持ち主が自分以外に変わったら
+            if (playerWithLargestArmy != playerIndex)
+            {
+                // 前の持ち主から2点没収する
+                if (playerWithLargestArmy != -1)
+                {
+                    players[playerWithLargestArmy].victoryPoints -= 2;
+                    Debug.Log($"プレイヤー {playerWithLargestArmy + 1} は「最大騎士力」を失った…(-2点)");
+                }
+
+                // 新しい持ち主に設定して2点付与する
+                playerWithLargestArmy = playerIndex;
+                players[playerIndex].victoryPoints += 2;
+                
+                Debug.Log($"🏆 プレイヤー {playerIndex + 1} が「最大騎士力」を獲得しました！(+2点)");
+
+                // ここで10点に達する可能性があるので勝利判定
+                if (players[playerIndex].victoryPoints >= 10)
+                {
+                    isGameOver = true;
+                    Debug.Log($"🎉【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！🎉");
+                }
+            }
         }
     }
 }
