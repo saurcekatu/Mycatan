@@ -6,6 +6,10 @@ public class Intersection : MonoBehaviour
     // 誰の建物か（-1は空き地、0〜3は各プレイヤー）
     public int ownerID = -1; 
     public bool isCity = false; // ← 【追加】都市化されているかどうかのフラグ
+    
+    [Header("港の設定")]
+    public ResourceType portType = ResourceType.None; // Noneなら港なし
+    
     private Renderer myRenderer;
 
     // --- グラフ（隣接リスト） ---
@@ -87,5 +91,13 @@ public class Intersection : MonoBehaviour
         transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
         Debug.Log(gameObject.name + " に建設しました！");
         GameManager.Instance.AddVictoryPoint(currentPlayer);
+
+        // もしこの交差点が「港」だったら、プレイヤーの港フラグをONにする
+        if (portType != ResourceType.None)
+        {
+            GameManager.Instance.players[currentPlayer].hasPort[portType] = true;
+            Debug.Log($" プレイヤー {currentPlayer + 1} が『{portType}』の 2:1 港を獲得しました！");
+        }
+
     }
 }

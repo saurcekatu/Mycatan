@@ -124,4 +124,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ccc8f5880c44a1846b468076cfc2323f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Intersection
-  playerMaterial: {fileID: 2100000, guid: dab811ace7ad1f0498f334085e39a9bb, type: 2}
+  ownerID: -1
+  isCity: 0
+  portType: 1
+  connectedRoads: []
+  adjacentNodes: []

@@ -31,6 +31,16 @@ public class PlayerData
         { DevCardType.Monopoly, 0 },
         { DevCardType.RoadBuilding, 0 }
     };
+
+    // どの資源の「2:1港」を持っているかを記憶する辞書
+    public Dictionary<ResourceType, bool> hasPort = new Dictionary<ResourceType, bool>()
+    {
+        { ResourceType.Wood, false },
+        { ResourceType.Brick, false },
+        { ResourceType.Wool, false },
+        { ResourceType.Grain, false },
+        { ResourceType.Ore, false }
+    };
 }
 
 public class GameManager : MonoBehaviour
@@ -613,5 +623,36 @@ public class GameManager : MonoBehaviour
             }
         }
         UpdateUI();
+    }
+
+    // 【新規追加】資源のトレード（交換）を実行する
+     public void TradeResources(ResourceType payRes, ResourceType getRes)
+    {
+        PlayerData pData = players[currentPlayerIndex];
+
+        // 自分が払いたい資源の港を持っていれば2個、無ければ基本ルールの4個
+        int cost = pData.hasPort[payRes] ? 2 : 4;
+
+        if (pData.inventory[payRes] >= cost)
+        {
+            // コスト分を減らして、欲しいものを1つ増やす
+            pData.inventory[payRes] -= cost;
+            pData.inventory[getRes] += 1;
+
+            Debug.Log($" プレイヤー {currentPlayerIndex + 1} は『{payRes}』を{cost}個払って、『{getRes}』を1個手に入れた！");
+            UpdateUI();
+        }
+        else
+        {
+            Debug.Log($"トレード失敗：『{payRes}』が足りません！（必要な数: {cost}個）");
+        }
+    }
+
+    // 【テスト用のボタン呼び出しメソッド】
+    // ※Unityのボタン機能は2つの引数(payとget)を直接渡せないので、お試し用のメソッドを用意します。
+    public void TestTradeWoodForOre()
+    {
+        // 「木」を払って「鉄」をもらうテスト
+        TradeResources(ResourceType.Wood, ResourceType.Ore);
     }
 }
