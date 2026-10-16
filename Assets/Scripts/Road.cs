@@ -65,6 +65,8 @@ public class Road : MonoBehaviour
         ownerID = currentPlayer;
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         Debug.Log(gameObject.name + " に道を引きました！");
-        // ▲▲▲ ここまで ▲▲▲
+        
+        // 道を引くたびに、最長交易路のチェックを実行する！
+        GameManager.Instance.CheckLongestRoad(currentPlayer);
     }
 }

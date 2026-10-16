@@ -66,6 +66,9 @@ public class GameManager : MonoBehaviour
     public int playerWithLargestArmy = -1;  // 現在の「最大騎士力」保持者(-1は誰もいない)
     public int currentLargestArmyCount = 2;
 
+    public int playerWithLongestRoad = -1;
+    public int currentLongestRoadCount = 4; // 奪うために必要な最低本数（最初は5本から）
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -280,7 +283,10 @@ public class GameManager : MonoBehaviour
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
         int vp = players[currentPlayerIndex].victoryPoints; // 現在の得点を取得
         // 画面に表示する文字列を組み立てる
-        string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】★現在: {vp}点 / 10点\n";
+        string armyText = (playerWithLargestArmy == currentPlayerIndex) ? " 最大騎士力" : "";
+        string roadText = (playerWithLongestRoad == currentPlayerIndex) ? " 最長交易路" : "";
+
+        string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】★現在: {vp}点 / 10点 {armyText}{roadText}\n";
         uiText += $"木: {inv[ResourceType.Wood]}  |  ";
         uiText += $"レンガ: {inv[ResourceType.Brick]}  |  ";
         uiText += $"麦: {inv[ResourceType.Grain]}  |  ";
@@ -504,5 +510,108 @@ public class GameManager : MonoBehaviour
                 }
             }
         }
+    }
+
+    // 【新規追加】指定したプレイヤーの最も長い道の長さを計算する
+    public int CalculateLongestRoad(int playerIndex)
+    {
+        int maxLength = 0;
+        Road[] allRoads = FindObjectsByType<Road>(FindObjectsSortMode.None);
+        List<Intersection> startingNodes = new List<Intersection>();
+        
+        // 1. 自分の道が繋がっている交差点（Node）をすべて抽出する
+        foreach(Road r in allRoads)
+        {
+            if (r.ownerID == playerIndex)
+            {
+                foreach(Intersection node in r.connectedNodes)
+                {
+                    if (!startingNodes.Contains(node)) startingNodes.Add(node);
+                }
+            }
+        }
+
+        // 2. すべての交差点をスタート地点として、深さ優先探索（DFS）を実行
+        foreach(Intersection startNode in startingNodes)
+        {
+            List<Road> visited = new List<Road>();
+            int length = DFS(startNode, visited, playerIndex);
+            if (length > maxLength) maxLength = length;
+        }
+        return maxLength;
+    }
+
+    // 【新規追加】深さ優先探索（DFS）の実体
+    private int DFS(Intersection currentNode, List<Road> visitedRoads, int playerIndex)
+    {
+        // カタン公式ルール：相手の村や都市がある交差点は、道が分断される！
+        if (currentNode.ownerID != -1 && currentNode.ownerID != playerIndex) return 0;
+
+        int maxDepth = 0;
+
+        // 今いる交差点から伸びるすべての道を調べる
+        foreach (Road road in currentNode.connectedRoads)
+        {
+            // 自分の道であり、かつ今回のルートでまだ通っていない道なら進む
+            if (road.ownerID == playerIndex && !visitedRoads.Contains(road))
+            {
+                visitedRoads.Add(road); // 通った記録をつける
+
+                // 道の「反対側」の交差点を見つける
+                Intersection nextNode = null;
+                foreach (Intersection n in road.connectedNodes)
+                {
+                    if (n != currentNode) nextNode = n;
+                }
+
+                // 次の交差点へ再帰的に進む
+                int depth = 1;
+                if (nextNode != null)
+                {
+                    depth += DFS(nextNode, visitedRoads, playerIndex);
+                }
+
+                if (depth > maxDepth) maxDepth = depth;
+
+                // バックトラック：別ルートも探せるように通った記録を消す
+                visitedRoads.Remove(road); 
+            }
+        }
+        return maxDepth;
+    }
+
+    // 【新規追加】最長交易路の条件を満たしたかチェックする
+    public void CheckLongestRoad(int playerIndex)
+    {
+        int myRoadLength = CalculateLongestRoad(playerIndex);
+        
+        // ログで現在の道の長さを確認できるようにする
+        Debug.Log($"プレイヤー {playerIndex + 1} の現在の道: {myRoadLength}本");
+
+        if (myRoadLength > currentLongestRoadCount)
+        {
+            currentLongestRoadCount = myRoadLength; // 記録更新
+
+            if (playerWithLongestRoad != playerIndex)
+            {
+                if (playerWithLongestRoad != -1)
+                {
+                    players[playerWithLongestRoad].victoryPoints -= 2;
+                    Debug.Log($"プレイヤー {playerWithLongestRoad + 1} は「最長交易路」を失った…(-2点)");
+                }
+
+                playerWithLongestRoad = playerIndex;
+                players[playerIndex].victoryPoints += 2;
+                
+                Debug.Log($"🛣️ プレイヤー {playerIndex + 1} が「最長交易路」を獲得しました！(+2点)");
+
+                if (players[playerIndex].victoryPoints >= 10)
+                {
+                    isGameOver = true;
+                    Debug.Log($"🎉【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！🎉");
+                }
+            }
+        }
+        UpdateUI();
     }
 }
