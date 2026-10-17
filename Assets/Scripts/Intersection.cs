@@ -98,11 +98,23 @@ public class Intersection : MonoBehaviour
         }
 
         // ここから下は既存の「開拓地（村）を建てる」処理
-        if (ownerID != -1) { GameManager.Instance.ShowPopup("すでに建物があります！"); Debug.Log("すでに建物があります！"); return; }
+        if (ownerID != -1) 
+        { 
+            GameManager.Instance.ShowPopup("すでに建物があります！"); 
+            Debug.Log("すでに建物があります！"); 
+            GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
+            return; 
+        }
         
         foreach (Intersection node in adjacentNodes)
         {
-            if (node.ownerID != -1) { GameManager.Instance.ShowPopup("近隣の村と近すぎます！（距離ルール違反）"); Debug.Log("近隣の村と近すぎます！（距離ルール違反）"); return; }
+            if (node.ownerID != -1) 
+            { 
+                GameManager.Instance.ShowPopup("近隣の村と近すぎます！（距離ルール違反）");
+                Debug.Log("近隣の村と近すぎます！（距離ルール違反）");
+                GameManager.Instance.PlaySound(GameManager.Instance.errorSound); 
+                return; 
+            }
         }
 
         if (!GameManager.Instance.TryPaySettlementCost()) return;

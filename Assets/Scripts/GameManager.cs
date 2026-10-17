@@ -92,6 +92,22 @@ public class GameManager : MonoBehaviour
     public int maxPortsCount = 9; // カタンの基本ルールは9個
     public int portSpacing = 2;   // 1=真隣には置かない、2=間に1マス以上空ける
     
+    [Header("サウンド設定")]
+    public AudioSource audioSource;
+    public AudioClip errorSound;          // エラー音
+
+    // ▼ 建築音を3種類に分割 ▼
+    public AudioClip buildRoadSound;       // 道の建築音
+    public AudioClip buildSettlementSound; // 開拓地の建築音
+    public AudioClip buildCitySound;       // 都市の建築音
+
+    // ▼ サイコロ音を配列化（何種類でも登録可能に） ▼
+    public AudioClip[] diceSounds;         
+
+    public AudioClip tradeSound;          // 取引音
+    public AudioClip buttonClickSound;    // 【追加】ボタンクリック音
+
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -247,11 +263,19 @@ public class GameManager : MonoBehaviour
         {
             ShowPopup("【警告】先にタイルをクリックして、盗賊を移動させてください！");
             Debug.Log("【警告】先にタイルをクリックして、盗賊を移動させてください！");
+            PlaySound(errorSound);
             return; 
         }
         int dice1 = Random.Range(1, 7);
         int dice2 = Random.Range(1, 7);
         int total = dice1 + dice2;
+
+        // もしサイコロ音が1つ以上登録されていれば、ランダムに1つ選んで鳴らす
+        if (diceSounds.Length > 0)
+        {
+            int randomIndex = Random.Range(0, diceSounds.Length);
+            PlaySound(diceSounds[randomIndex]);
+        }
 
         if (total == 7)
         {
@@ -302,10 +326,12 @@ public class GameManager : MonoBehaviour
             inv[ResourceType.Wood] -= 1;
             inv[ResourceType.Brick] -= 1;
             UpdateUI(); // 資源を支払ったので文字を更新
+            PlaySound(buildRoadSound);
             return true;
         }
         ShowPopup("資源が足りません！（道：木1, レンガ1 が必要です）");
         Debug.Log("資源が足りません！（道：木1, レンガ1 が必要です）");
+        PlaySound(errorSound);
         return false;
     }
 
@@ -320,10 +346,12 @@ public class GameManager : MonoBehaviour
             inv[ResourceType.Grain] -= 1;
             inv[ResourceType.Wool] -= 1;
             UpdateUI(); // 資源を支払ったので文字を更新
+            PlaySound(buildSettlementSound);
             return true;
         }
         ShowPopup("資源が足りません！（開拓地：木1, レンガ1, 麦1, 羊1 が必要です）");
         Debug.Log("資源が足りません！（開拓地：木1, レンガ1, 麦1, 羊1 が必要です）");
+        PlaySound(errorSound);
         return false; 
     }
 
@@ -337,12 +365,14 @@ public class GameManager : MonoBehaviour
         {
             inv[ResourceType.Ore] -= 3;
             inv[ResourceType.Grain] -= 2;
-            UpdateUI(); 
+            UpdateUI();
+            PlaySound(buildCitySound); 
             return true;
         }
 
         ShowPopup("資源が足りません！（都市：鉄3, 麦2 が必要です）");
         Debug.Log("資源が足りません！（都市：鉄3, 麦2 が必要です）");
+        PlaySound(errorSound);
         return false;
     }
 
@@ -432,6 +462,7 @@ public class GameManager : MonoBehaviour
         {
             ShowPopup("同じ場所には移動できません！別のタイルを選んでください。");
             Debug.Log("同じ場所には移動できません！別のタイルを選んでください。");
+            PlaySound(errorSound);
             return;
         }
 
@@ -519,6 +550,7 @@ public class GameManager : MonoBehaviour
         {
             ShowPopup("発展カードの山札がもうありません！");
             Debug.Log("発展カードの山札がもうありません！");
+            PlaySound(errorSound);
             return;
         }
 
@@ -558,6 +590,7 @@ public class GameManager : MonoBehaviour
         {
             ShowPopup("資源が足りません！（発展カード：鉄1, 麦1, 羊1 が必要です）");
             Debug.Log("資源が足りません！（発展カード：鉄1, 麦1, 羊1 が必要です）");
+            PlaySound(errorSound);
         }
     }
 
@@ -569,6 +602,7 @@ public class GameManager : MonoBehaviour
         {
             ShowPopup("現在はすでに盗賊の移動待ちです！");
             Debug.Log("現在はすでに盗賊の移動待ちです！");
+            PlaySound(errorSound);
             return;
         }
 
@@ -590,6 +624,7 @@ public class GameManager : MonoBehaviour
         {
             ShowPopup("騎士カードを持っていません！");
             Debug.Log("騎士カードを持っていません！");
+            PlaySound(errorSound);
         }
     }
 
@@ -764,12 +799,14 @@ public class GameManager : MonoBehaviour
 
             ShowPopup($" プレイヤー {currentPlayerIndex + 1} は『{payRes}』を{cost}個払って、『{getRes}』を1個手に入れた！(レート {cost}:1)");
             Debug.Log($" プレイヤー {currentPlayerIndex + 1} は『{payRes}』を{cost}個払って、『{getRes}』を1個手に入れた！(レート {cost}:1)");
+            PlaySound(tradeSound);
             UpdateUI();
         }
         else
         {
             ShowPopup($"トレード失敗：『{payRes}』が足りません！（現在のあなたの最安レートでは {cost}個 必要です）");
             Debug.Log($"トレード失敗：『{payRes}』が足りません！（現在のあなたの最安レートでは {cost}個 必要です）");
+            PlaySound(errorSound);
         }
     }
 
@@ -801,6 +838,7 @@ public class GameManager : MonoBehaviour
         {
             ShowPopup("同じ資源同士は交換できません！別の資源を選んでください。");
             Debug.Log("同じ資源同士は交換できません！別の資源を選んでください。");
+            PlaySound(errorSound);
             return;
         }
 
@@ -829,5 +867,20 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(2.0f); // 【魔法の1行】ここで2秒間待機する
 
         popupText.gameObject.SetActive(false); // 2秒経ったら文字を隠す！
+    }
+
+    public void PlaySound(AudioClip clip)
+    {
+        // 音声データがセットされていれば、音が重なっても途切れない「PlayOneShot」で鳴らす
+        if (audioSource != null && clip != null)
+        {
+            audioSource.PlayOneShot(clip);
+        }
+    }
+
+    // 【新規追加】ボタンが押された時にUIから呼び出すメソッド
+    public void PlayClickSound()
+    {
+        PlaySound(buttonClickSound);
     }
 }
