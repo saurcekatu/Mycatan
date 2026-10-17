@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using TMPro; // 【追加】UI（文字）を操作するために必要
 
-public enum ResourceType { None, Wood, Brick, Wool, Grain, Ore }
+public enum ResourceType { None, Wood, Brick, Wool, Grain, Ore, Any }
 
 // 【追加】発展カードの種類（騎士、勝利点、収穫、独占、街道建設）
 public enum DevCardType { Knight, VictoryPoint, YearOfPlenty, Monopoly, RoadBuilding }
@@ -41,6 +41,8 @@ public class PlayerData
         { ResourceType.Grain, false },
         { ResourceType.Ore, false }
     };
+
+    public bool has3to1Port = false; // 3:1港（一般港）を持っているか
 }
 
 public class GameManager : MonoBehaviour
@@ -79,6 +81,10 @@ public class GameManager : MonoBehaviour
     public int playerWithLongestRoad = -1;
     public int currentLongestRoadCount = 4; // 奪うために必要な最低本数（最初は5本から）
 
+    [Header("港の生成設定")]
+    public int maxPortsCount = 9; // カタンの基本ルールは9個
+    public int portSpacing = 2;   // 1=真隣には置かない、2=間に1マス以上空ける
+    
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -117,6 +123,78 @@ public class GameManager : MonoBehaviour
 
         // 【追加】ボードが生成された直後に、砂漠を探して盗賊を配置する
         Invoke("InitializeRobber", 0.1f);
+        Invoke("InitializePorts", 0.1f);
+
+    }
+
+    // 【新規追加】港をランダムに配置する
+    // 【改良版】港を間隔をあけてランダムに配置する
+    void InitializePorts()
+    {
+        Intersection[] allNodes = FindObjectsByType<Intersection>(FindObjectsSortMode.None);
+        List<Intersection> edgeNodes = new List<Intersection>();
+
+        // 1. マップの「端（海沿い）」にある交差点を探す
+        foreach (Intersection node in allNodes)
+        {
+            if (node.adjacentNodes.Count < 3) edgeNodes.Add(node);
+        }
+
+        // 2. カタン公式の港セットを作る
+        List<ResourceType> portDeck = new List<ResourceType>()
+        {
+            ResourceType.Any, ResourceType.Any, ResourceType.Any, ResourceType.Any, 
+            ResourceType.Wood, ResourceType.Brick, ResourceType.Wool, ResourceType.Grain, ResourceType.Ore 
+        };
+
+        // 【追加】港の種類をシャッフルする（間隔設定によって9個全部置けない場合でも、種類が偏らないようにするため）
+        for (int i = 0; i < portDeck.Count; i++)
+        {
+            ResourceType temp = portDeck[i];
+            int r = Random.Range(i, portDeck.Count);
+            portDeck[i] = portDeck[r];
+            portDeck[r] = temp;
+        }
+
+        int placedCount = 0;
+
+        // 3. ランダムな端の交差点に港を割り当てる
+        foreach (ResourceType port in portDeck)
+        {
+            // 最大数に達したか、もう間隔をあけて置ける場所がなくなったら終了
+            if (placedCount >= maxPortsCount || edgeNodes.Count == 0) break;
+
+            // ランダムに場所を選ぶ
+            int randomIndex = Random.Range(0, edgeNodes.Count);
+            Intersection targetNode = edgeNodes[randomIndex];
+
+            targetNode.SetPort(port);
+            placedCount++;
+
+            // 【追加】配置した交差点と、その「周囲の交差点」を候補から除外する
+            RemoveNodeAndNeighbors(targetNode, edgeNodes, portSpacing);
+        }
+
+        
+    }
+
+    // 【新規追加】指定した交差点から、distance（距離）の範囲内にある交差点を候補リストから消す
+    void RemoveNodeAndNeighbors(Intersection node, List<Intersection> availableNodes, int distance)
+    {
+        // リストの中にいれば削除する
+        if (availableNodes.Contains(node)) 
+        {
+            availableNodes.Remove(node);
+        }
+
+        // まだ指定距離に達していなければ、隣の交差点も連鎖的に削除する（再帰処理）
+        if (distance > 0)
+        {
+            foreach (Intersection adj in node.adjacentNodes)
+            {
+                RemoveNodeAndNeighbors(adj, availableNodes, distance - 1);
+            }
+        }
     }
 
     // 【新規メソッド追加】砂漠を探して初期配置する
@@ -630,21 +708,31 @@ public class GameManager : MonoBehaviour
     {
         PlayerData pData = players[currentPlayerIndex];
 
-        // 自分が払いたい資源の港を持っていれば2個、無ければ基本ルールの4個
-        int cost = pData.hasPort[payRes] ? 2 : 4;
+        // 【確実なコスト計算アルゴリズム】
+        int cost = 4; // 基本は 4:1
 
+        if (pData.has3to1Port) 
+        {
+            cost = 3; // 3:1港を持っていれば 3 に割引
+        }
+
+        if (pData.hasPort.ContainsKey(payRes) && pData.hasPort[payRes]) 
+        {
+            cost = 2; // さらに、払う資源の専門港(2:1)を持っていれば 2 に上書き（最安値）
+        }
+
+        // 取引の実行
         if (pData.inventory[payRes] >= cost)
         {
-            // コスト分を減らして、欲しいものを1つ増やす
             pData.inventory[payRes] -= cost;
             pData.inventory[getRes] += 1;
 
-            Debug.Log($" プレイヤー {currentPlayerIndex + 1} は『{payRes}』を{cost}個払って、『{getRes}』を1個手に入れた！");
+            Debug.Log($" プレイヤー {currentPlayerIndex + 1} は『{payRes}』を{cost}個払って、『{getRes}』を1個手に入れた！(レート {cost}:1)");
             UpdateUI();
         }
         else
         {
-            Debug.Log($"トレード失敗：『{payRes}』が足りません！（必要な数: {cost}個）");
+            Debug.Log($"トレード失敗：『{payRes}』が足りません！（現在のあなたの最安レートでは {cost}個 必要です）");
         }
     }
 

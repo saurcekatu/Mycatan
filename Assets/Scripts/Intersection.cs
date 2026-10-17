@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public class Intersection : MonoBehaviour
 {
@@ -10,6 +11,8 @@ public class Intersection : MonoBehaviour
     [Header("港の設定")]
     public ResourceType portType = ResourceType.None; // Noneなら港なし
     
+    // 【追加】マップ上に表示する3Dテキスト
+    public TextMeshPro portText;
     private Renderer myRenderer;
 
     // --- グラフ（隣接リスト） ---
@@ -54,6 +57,23 @@ public class Intersection : MonoBehaviour
         }
     }
 
+
+    // 【新規追加】GameManagerから港を割り当てられた時の処理
+    public void SetPort(ResourceType type)
+    {
+        portType = type;
+
+        if (portText != null)
+        {
+            if (type == ResourceType.Any) portText.text = "3:1\n港";
+            else portText.text = $"{type}\n2:1";
+            
+            // 見やすくするために文字を少し上に浮かせる
+            portText.transform.localPosition = new Vector3(0, 0.5f, 0);
+        }
+    }
+
+
     void TryBuildSettlement()
     {
         int currentPlayer = GameManager.Instance.currentPlayerIndex;
@@ -93,10 +113,15 @@ public class Intersection : MonoBehaviour
         GameManager.Instance.AddVictoryPoint(currentPlayer);
 
         // もしこの交差点が「港」だったら、プレイヤーの港フラグをONにする
-        if (portType != ResourceType.None)
+        if (portType == ResourceType.Any)
+        {
+            GameManager.Instance.players[currentPlayer].has3to1Port = true;
+            Debug.Log($"⚓ プレイヤー {currentPlayer + 1} が『3:1 汎用港』を獲得しました！");
+        }
+        else if (portType != ResourceType.None)
         {
             GameManager.Instance.players[currentPlayer].hasPort[portType] = true;
-            Debug.Log($" プレイヤー {currentPlayer + 1} が『{portType}』の 2:1 港を獲得しました！");
+            Debug.Log($"⚓ プレイヤー {currentPlayer + 1} が『{portType}』の 2:1 港を獲得しました！");
         }
 
     }
