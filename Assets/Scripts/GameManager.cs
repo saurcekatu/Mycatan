@@ -64,6 +64,10 @@ public class GameManager : MonoBehaviour
     [Header("UI設定")]
     public TextMeshProUGUI resourceText; 
 
+    [Header("トレードUI")]
+    public TMP_Dropdown payDropdown; // 払う資源を選ぶドロップダウン
+    public TMP_Dropdown getDropdown; // もらう資源を選ぶドロップダウン
+
     [Header("盗賊システム")]
     public GameObject robberPrefab;
     private GameObject robberInstance; // 画面にいる盗賊の実体
@@ -742,5 +746,31 @@ public class GameManager : MonoBehaviour
     {
         // 「木」を払って「鉄」をもらうテスト
         TradeResources(ResourceType.Wood, ResourceType.Ore);
+    }
+
+    // 【新規追加】画面のドロップダウンの選択を読み取ってトレードを実行する
+    public void ExecuteTradeFromUI()
+    {
+        // もしドロップダウンが設定されていなければエラーを出して止める
+        if (payDropdown == null || getDropdown == null)
+        {
+            Debug.LogError("ドロップダウンが設定されていません！");
+            return;
+        }
+
+        // ドロップダウンの選択番号（0, 1, 2, 3, 4）を、ResourceType（1, 2, 3, 4, 5）に変換する
+        // ※ 0:木, 1:レンガ, 2:羊, 3:麦, 4:鉄 の順番で設定する前提です
+        ResourceType payRes = (ResourceType)(payDropdown.value + 1);
+        ResourceType getRes = (ResourceType)(getDropdown.value + 1);
+
+        // 同じ資源同士を選んでいた場合は弾く
+        if (payRes == getRes)
+        {
+            Debug.Log("同じ資源同士は交換できません！別の資源を選んでください。");
+            return;
+        }
+
+        // すでに作ってある「確実なトレード処理」に、選んだ資源を渡して実行！
+        TradeResources(payRes, getRes);
     }
 }
