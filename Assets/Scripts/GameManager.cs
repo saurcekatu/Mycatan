@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using TMPro; // 【追加】UI（文字）を操作するために必要
 using System.Collections;
+using UnityEngine.SceneManagement;
 
 public enum ResourceType { None, Wood, Brick, Wool, Grain, Ore, Any }
 
@@ -91,7 +92,10 @@ public class GameManager : MonoBehaviour
     [Header("港の生成設定")]
     public int maxPortsCount = 9; // カタンの基本ルールは9個
     public int portSpacing = 2;   // 1=真隣には置かない、2=間に1マス以上空ける
-    
+        
+    [Header("リザルト画面")]
+    public GameObject resultPanel; // ゲーム終了時に表示する画面全体    
+
     [Header("サウンド設定")]
     public AudioSource audioSource;
     public AudioClip errorSound;          // エラー音
@@ -402,6 +406,11 @@ public class GameManager : MonoBehaviour
         {
             isGameOver = true; // ゲーム終了状態にする
             
+            if (resultPanel != null)
+            {
+                resultPanel.SetActive(true); 
+            }
+
             ShowPopup("===============================================");
             ShowPopup($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
             ShowPopup("===============================================");
@@ -660,6 +669,10 @@ public class GameManager : MonoBehaviour
                 if (players[playerIndex].victoryPoints >= 10)
                 {
                     isGameOver = true;
+                    if (resultPanel != null)
+                    {
+                        resultPanel.SetActive(true); 
+                    }
                     ShowPopup($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
                     Debug.Log($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
                 }
@@ -765,6 +778,10 @@ public class GameManager : MonoBehaviour
                 if (players[playerIndex].victoryPoints >= 10)
                 {
                     isGameOver = true;
+                    if (resultPanel != null)
+                    {
+                        resultPanel.SetActive(true); 
+                    }
                     ShowPopup($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
                     Debug.Log($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
                 }
@@ -867,6 +884,12 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(2.0f); // 【魔法の1行】ここで2秒間待機する
 
         popupText.gameObject.SetActive(false); // 2秒経ったら文字を隠す！
+    }
+
+    // 【新規追加】タイトル画面に戻るメソッド
+    public void ReturnToTitle()
+    {
+        SceneManager.LoadScene("TitleScene");
     }
 
     public void PlaySound(AudioClip clip)
