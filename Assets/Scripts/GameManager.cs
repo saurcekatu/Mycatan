@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using TMPro; // 【追加】UI（文字）を操作するために必要
+using System.Collections;
 
 public enum ResourceType { None, Wood, Brick, Wool, Grain, Ore, Any }
 
@@ -63,6 +64,8 @@ public class GameManager : MonoBehaviour
     // 【追加】画面に表示するUIテキストの枠
     [Header("UI設定")]
     public TextMeshProUGUI resourceText; 
+    public TextMeshProUGUI popupText; // ポップアップ用のテキスト枠
+    private Coroutine popupCoroutine; // 実行中のコルーチンを記憶する変数
 
     [Header("トレードUI")]
     public TMP_Dropdown payDropdown; // 払う資源を選ぶドロップダウン
@@ -230,7 +233,9 @@ public class GameManager : MonoBehaviour
         currentPlayerIndex++;
         if (currentPlayerIndex >= playerMaterials.Length) currentPlayerIndex = 0;
         
+        ShowPopup("ターン終了！次は プレイヤー " + (currentPlayerIndex + 1) + " の番です。");
         Debug.Log("ターン終了！次は プレイヤー " + (currentPlayerIndex + 1) + " の番です。");
+
         UpdateUI(); // ターンが変わったので文字を更新
     }
 
@@ -240,6 +245,7 @@ public class GameManager : MonoBehaviour
         //盗賊待ちでサイコロをはじく
         if (isWaitingForRobber)
         {
+            ShowPopup("【警告】先にタイルをクリックして、盗賊を移動させてください！");
             Debug.Log("【警告】先にタイルをクリックして、盗賊を移動させてください！");
             return; 
         }
@@ -249,6 +255,7 @@ public class GameManager : MonoBehaviour
 
         if (total == 7)
         {
+            ShowPopup("盗賊が出た！移動させるタイルをクリックしてください。");
             Debug.Log("盗賊が出た！移動させるタイルをクリックしてください。");
             isWaitingForRobber = true; // クリック待ちモードON
             return;
@@ -270,6 +277,7 @@ public class GameManager : MonoBehaviour
 
         players[playerIndex].inventory[res] += amount;
         UpdateUI(); // 資源が増えたので文字を更新
+        ShowPopup($"プレイヤー {playerIndex + 1} が {res} を獲得！ (現在の所持数: {players[playerIndex].inventory[res]} 個)");
         Debug.Log($"プレイヤー {playerIndex + 1} が {res} を獲得！ (現在の所持数: {players[playerIndex].inventory[res]} 個)");
     }
 
@@ -296,6 +304,7 @@ public class GameManager : MonoBehaviour
             UpdateUI(); // 資源を支払ったので文字を更新
             return true;
         }
+        ShowPopup("資源が足りません！（道：木1, レンガ1 が必要です）");
         Debug.Log("資源が足りません！（道：木1, レンガ1 が必要です）");
         return false;
     }
@@ -313,6 +322,7 @@ public class GameManager : MonoBehaviour
             UpdateUI(); // 資源を支払ったので文字を更新
             return true;
         }
+        ShowPopup("資源が足りません！（開拓地：木1, レンガ1, 麦1, 羊1 が必要です）");
         Debug.Log("資源が足りません！（開拓地：木1, レンガ1, 麦1, 羊1 が必要です）");
         return false; 
     }
@@ -331,6 +341,7 @@ public class GameManager : MonoBehaviour
             return true;
         }
 
+        ShowPopup("資源が足りません！（都市：鉄3, 麦2 が必要です）");
         Debug.Log("資源が足りません！（都市：鉄3, 麦2 が必要です）");
         return false;
     }
@@ -346,6 +357,7 @@ public class GameManager : MonoBehaviour
         players[p].inventory[ResourceType.Ore] += 10;
 
         UpdateUI(); // チートで資源が増えたので文字を更新
+        ShowPopup("チートにより資源を獲得しました。");
         Debug.Log("チートにより資源を獲得しました。");
     }
 
@@ -360,9 +372,10 @@ public class GameManager : MonoBehaviour
         {
             isGameOver = true; // ゲーム終了状態にする
             
-            Debug.Log("===============================================");
-            Debug.Log($"🎉【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！🎉");
-            Debug.Log("===============================================");
+            ShowPopup("===============================================");
+            ShowPopup($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
+            ShowPopup("===============================================");
+            Debug.Log($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
         }
     }
 
@@ -417,6 +430,7 @@ public class GameManager : MonoBehaviour
         // ルール：今いる場所には移動できない
         if (targetHex == currentRobberHex)
         {
+            ShowPopup("同じ場所には移動できません！別のタイルを選んでください。");
             Debug.Log("同じ場所には移動できません！別のタイルを選んでください。");
             return;
         }
@@ -432,6 +446,7 @@ public class GameManager : MonoBehaviour
         robberInstance.transform.position = targetHex.transform.position + new Vector3(0, 0.2f, 0);
 
         isWaitingForRobber = false; // クリック待ちモード終了
+        ShowPopup("盗賊を移動しました！");
         Debug.Log("盗賊を移動しました！");
 
         List<int> victims = new List<int>(); // 被害者リスト
@@ -456,6 +471,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            ShowPopup("周囲に他のプレイヤーの村がないため、誰も襲えませんでした。");
             Debug.Log("周囲に他のプレイヤーの村がないため、誰も襲えませんでした。");
         }
         // ▲▲▲ ここまで追加 ▲▲▲
@@ -485,11 +501,13 @@ public class GameManager : MonoBehaviour
             vData.inventory[stolen]--;
             players[thief].inventory[stolen]++;
             
+            ShowPopup($"【強奪】プレイヤー {thief + 1} は、プレイヤー {victim + 1} から 『{stolen}』 を1つ奪った！");
             Debug.Log($"【強奪】プレイヤー {thief + 1} は、プレイヤー {victim + 1} から 『{stolen}』 を1つ奪った！");
             UpdateUI(); // 画面の数値を更新
         }
         else
         {
+            ShowPopup($"プレイヤー {victim + 1} は資源を持っていなかった！");
             Debug.Log($"プレイヤー {victim + 1} は資源を持っていなかった！");
         }
     }
@@ -499,6 +517,7 @@ public class GameManager : MonoBehaviour
     {
         if (devCardDeck.Count == 0)
         {
+            ShowPopup("発展カードの山札がもうありません！");
             Debug.Log("発展カードの山札がもうありません！");
             return;
         }
@@ -524,10 +543,12 @@ public class GameManager : MonoBehaviour
             if (drawnCard == DevCardType.VictoryPoint)
             {
                 AddVictoryPoint(currentPlayerIndex);
+                ShowPopup($"プレイヤー {currentPlayerIndex + 1} は『勝利点』カードを引いた！(現在: {players[currentPlayerIndex].victoryPoints}点)");
                 Debug.Log($"プレイヤー {currentPlayerIndex + 1} は『勝利点』カードを引いた！(現在: {players[currentPlayerIndex].victoryPoints}点)");
             }
             else
             {
+                ShowPopup($"プレイヤー {currentPlayerIndex + 1} は『{drawnCard}』カードを引いた！");
                 Debug.Log($"プレイヤー {currentPlayerIndex + 1} は『{drawnCard}』カードを引いた！");
             }
 
@@ -535,6 +556,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            ShowPopup("資源が足りません！（発展カード：鉄1, 麦1, 羊1 が必要です）");
             Debug.Log("資源が足りません！（発展カード：鉄1, 麦1, 羊1 が必要です）");
         }
     }
@@ -545,6 +567,7 @@ public class GameManager : MonoBehaviour
         // 既にサイコロで7を出して移動待ちの場合は使えないようにする
         if (isWaitingForRobber) 
         {
+            ShowPopup("現在はすでに盗賊の移動待ちです！");
             Debug.Log("現在はすでに盗賊の移動待ちです！");
             return;
         }
@@ -559,11 +582,13 @@ public class GameManager : MonoBehaviour
             isWaitingForRobber = true; 
             players[currentPlayerIndex].playedKnights++; // 使った回数を増やす
             CheckLargestArmy(currentPlayerIndex);
-            Debug.Log($"⚔️ プレイヤー {currentPlayerIndex + 1} が【騎士カード】を使用しました！移動させるタイルをクリックしてください。");
+            ShowPopup($"プレイヤー {currentPlayerIndex + 1} が【騎士カード】を使用しました！移動させるタイルをクリックしてください。");
+            Debug.Log($"プレイヤー {currentPlayerIndex + 1} が【騎士カード】を使用しました！移動させるタイルをクリックしてください。");
             UpdateUI();
         }
         else
         {
+            ShowPopup("騎士カードを持っていません！");
             Debug.Log("騎士カードを持っていません！");
         }
     }
@@ -585,6 +610,7 @@ public class GameManager : MonoBehaviour
                 if (playerWithLargestArmy != -1)
                 {
                     players[playerWithLargestArmy].victoryPoints -= 2;
+                    ShowPopup($"プレイヤー {playerWithLargestArmy + 1} は「最大騎士力」を失った…(-2点)");
                     Debug.Log($"プレイヤー {playerWithLargestArmy + 1} は「最大騎士力」を失った…(-2点)");
                 }
 
@@ -592,13 +618,15 @@ public class GameManager : MonoBehaviour
                 playerWithLargestArmy = playerIndex;
                 players[playerIndex].victoryPoints += 2;
                 
-                Debug.Log($"🏆 プレイヤー {playerIndex + 1} が「最大騎士力」を獲得しました！(+2点)");
+                ShowPopup($" プレイヤー {playerIndex + 1} が「最大騎士力」を獲得しました！(+2点)");
+                Debug.Log($" プレイヤー {playerIndex + 1} が「最大騎士力」を獲得しました！(+2点)");
 
                 // ここで10点に達する可能性があるので勝利判定
                 if (players[playerIndex].victoryPoints >= 10)
                 {
                     isGameOver = true;
-                    Debug.Log($"🎉【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！🎉");
+                    ShowPopup($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
+                    Debug.Log($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
                 }
             }
         }
@@ -689,18 +717,21 @@ public class GameManager : MonoBehaviour
                 if (playerWithLongestRoad != -1)
                 {
                     players[playerWithLongestRoad].victoryPoints -= 2;
+                    ShowPopup($"プレイヤー {playerWithLongestRoad + 1} は「最長交易路」を失った…(-2点)");
                     Debug.Log($"プレイヤー {playerWithLongestRoad + 1} は「最長交易路」を失った…(-2点)");
                 }
 
                 playerWithLongestRoad = playerIndex;
                 players[playerIndex].victoryPoints += 2;
                 
-                Debug.Log($"🛣️ プレイヤー {playerIndex + 1} が「最長交易路」を獲得しました！(+2点)");
+                ShowPopup($" プレイヤー {playerIndex + 1} が「最長交易路」を獲得しました！(+2点)");
+                Debug.Log($" プレイヤー {playerIndex + 1} が「最長交易路」を獲得しました！(+2点)");
 
                 if (players[playerIndex].victoryPoints >= 10)
                 {
                     isGameOver = true;
-                    Debug.Log($"🎉【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！🎉");
+                    ShowPopup($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
+                    Debug.Log($"【ゲームクリア】プレイヤー {playerIndex + 1} の勝利です！");
                 }
             }
         }
@@ -731,22 +762,24 @@ public class GameManager : MonoBehaviour
             pData.inventory[payRes] -= cost;
             pData.inventory[getRes] += 1;
 
+            ShowPopup($" プレイヤー {currentPlayerIndex + 1} は『{payRes}』を{cost}個払って、『{getRes}』を1個手に入れた！(レート {cost}:1)");
             Debug.Log($" プレイヤー {currentPlayerIndex + 1} は『{payRes}』を{cost}個払って、『{getRes}』を1個手に入れた！(レート {cost}:1)");
             UpdateUI();
         }
         else
         {
+            ShowPopup($"トレード失敗：『{payRes}』が足りません！（現在のあなたの最安レートでは {cost}個 必要です）");
             Debug.Log($"トレード失敗：『{payRes}』が足りません！（現在のあなたの最安レートでは {cost}個 必要です）");
         }
     }
 
     // 【テスト用のボタン呼び出しメソッド】
     // ※Unityのボタン機能は2つの引数(payとget)を直接渡せないので、お試し用のメソッドを用意します。
-    public void TestTradeWoodForOre()
-    {
-        // 「木」を払って「鉄」をもらうテスト
-        TradeResources(ResourceType.Wood, ResourceType.Ore);
-    }
+    //public void TestTradeWoodForOre()
+    // {
+    //     // 「木」を払って「鉄」をもらうテスト
+    //     TradeResources(ResourceType.Wood, ResourceType.Ore);
+    // }
 
     // 【新規追加】画面のドロップダウンの選択を読み取ってトレードを実行する
     public void ExecuteTradeFromUI()
@@ -766,11 +799,35 @@ public class GameManager : MonoBehaviour
         // 同じ資源同士を選んでいた場合は弾く
         if (payRes == getRes)
         {
+            ShowPopup("同じ資源同士は交換できません！別の資源を選んでください。");
             Debug.Log("同じ資源同士は交換できません！別の資源を選んでください。");
             return;
         }
 
         // すでに作ってある「確実なトレード処理」に、選んだ資源を渡して実行！
         TradeResources(payRes, getRes);
+    }
+
+    // 【新規追加】画面の中央にメッセージを表示し、2秒後に消す処理
+    public void ShowPopup(string message)
+    {
+        if (popupText == null) return;
+
+        // もし既にポップアップが表示中なら、一旦リセットする（連続で押した時のバグ防止）
+        if (popupCoroutine != null) StopCoroutine(popupCoroutine);
+
+        // 新しいポップアップ処理（コルーチン）を開始する
+        popupCoroutine = StartCoroutine(PopupRoutine(message));
+    }
+
+    // コルーチンの本体（時間を操れる特殊なメソッド）
+    private IEnumerator PopupRoutine(string message)
+    {
+        popupText.text = message;
+        popupText.gameObject.SetActive(true); // 文字を表示！
+
+        yield return new WaitForSeconds(2.0f); // 【魔法の1行】ここで2秒間待機する
+
+        popupText.gameObject.SetActive(false); // 2秒経ったら文字を隠す！
     }
 }

@@ -91,17 +91,18 @@ public class Intersection : MonoBehaviour
                 // すでに村で1点もらっているので、「+1点」して合計2点にする
                 GameManager.Instance.AddVictoryPoint(currentPlayer); 
                 
+                GameManager.Instance.ShowPopup(gameObject.name + " を『都市』にアップグレードしました！");
                 Debug.Log(gameObject.name + " を『都市』にアップグレードしました！");
             }
             return;
         }
 
         // ここから下は既存の「開拓地（村）を建てる」処理
-        if (ownerID != -1) { Debug.Log("すでに建物があります！"); return; }
+        if (ownerID != -1) { GameManager.Instance.ShowPopup("すでに建物があります！"); Debug.Log("すでに建物があります！"); return; }
         
         foreach (Intersection node in adjacentNodes)
         {
-            if (node.ownerID != -1) { Debug.Log("近隣の村と近すぎます！（距離ルール違反）"); return; }
+            if (node.ownerID != -1) { GameManager.Instance.ShowPopup("近隣の村と近すぎます！（距離ルール違反）"); Debug.Log("近隣の村と近すぎます！（距離ルール違反）"); return; }
         }
 
         if (!GameManager.Instance.TryPaySettlementCost()) return;
@@ -109,6 +110,7 @@ public class Intersection : MonoBehaviour
         ownerID = currentPlayer;
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+        GameManager.Instance.ShowPopup(gameObject.name + " に建設しました！");
         Debug.Log(gameObject.name + " に建設しました！");
         GameManager.Instance.AddVictoryPoint(currentPlayer);
 
@@ -116,12 +118,14 @@ public class Intersection : MonoBehaviour
         if (portType == ResourceType.Any)
         {
             GameManager.Instance.players[currentPlayer].has3to1Port = true;
-            Debug.Log($"⚓ プレイヤー {currentPlayer + 1} が『3:1 汎用港』を獲得しました！");
+            GameManager.Instance.ShowPopup($" プレイヤー {currentPlayer + 1} が『3:1 汎用港』を獲得しました！");
+            Debug.Log($" プレイヤー {currentPlayer + 1} が『3:1 汎用港』を獲得しました！");
         }
         else if (portType != ResourceType.None)
         {
             GameManager.Instance.players[currentPlayer].hasPort[portType] = true;
-            Debug.Log($"⚓ プレイヤー {currentPlayer + 1} が『{portType}』の 2:1 港を獲得しました！");
+            GameManager.Instance.ShowPopup($" プレイヤー {currentPlayer + 1} が『{portType}』の 2:1 港を獲得しました！");
+            Debug.Log($" プレイヤー {currentPlayer + 1} が『{portType}』の 2:1 港を獲得しました！");
         }
 
     }

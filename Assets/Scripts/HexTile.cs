@@ -26,6 +26,7 @@ public class HexTile : MonoBehaviour
         // 盗賊がいる場合の処理（そのまま）
         if (hasRobber)
         {
+            GameManager.Instance.ShowPopup($"【盗賊】 出目は{number}ですが、{terrainType}の資源はブロックされました！");
             Debug.Log($"【盗賊】 出目は{number}ですが、{terrainType}の資源はブロックされました！");
             return;
         }
@@ -48,6 +49,7 @@ public class HexTile : MonoBehaviour
         // 【追加】もし誰の村もなく、資源が空振りした場合はログを出す
         if (!resourceGiven)
         {
+            GameManager.Instance.ShowPopup($"出目【{number}】: 『{terrainType}』から資源が出ましたが、周りに誰の村もありませんでした。");
             Debug.Log($"出目【{number}】: 『{terrainType}』から資源が出ましたが、周りに誰の村もありませんでした。");
         }
     }
