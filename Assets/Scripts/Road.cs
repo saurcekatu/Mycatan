@@ -1,3 +1,4 @@
+using UnityEngine.EventSystems;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -32,6 +33,10 @@ public class Road : MonoBehaviour
 
     void Update()
     {
+        if (EventSystem.current.IsPointerOverGameObject())
+        {
+            return; 
+        }
         if (Input.GetMouseButtonDown(0))
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);

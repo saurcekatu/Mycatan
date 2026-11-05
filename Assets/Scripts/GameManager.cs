@@ -9,6 +9,16 @@ public enum ResourceType { None, Wood, Brick, Wool, Grain, Ore, Any }
 // 【追加】発展カードの種類（騎士、勝利点、収穫、独占、街道建設）
 public enum DevCardType { Knight, VictoryPoint, YearOfPlenty, Monopoly, RoadBuilding }
 
+// ▼▼▼ 新規追加：ゲームの進行状態 ▼▼▼
+public enum GameState 
+{ 
+    Setup,          // 初期配置フェーズ（次回実装します）
+    WaitingForRoll, // サイコロを振る前
+    MainAction,     // サイコロを振った後（家を建てたりトレードできる）
+    Trading,
+    RobberMoving,   // 盗賊の移動待ち（7が出た時や騎士を使った時）
+    GameOver        // ゲーム終了
+}
 
 
 public class PlayerData
@@ -59,6 +69,8 @@ public class GameManager : MonoBehaviour
     
     [Header("現在の状態")]
     public int currentPlayerIndex = 0;
+    public GameState currentState = GameState.WaitingForRoll;
+    public bool hasRollDice = false;
 
     public PlayerData[] players = new PlayerData[4];
 
@@ -71,6 +83,25 @@ public class GameManager : MonoBehaviour
     [Header("トレードUI")]
     public TMP_Dropdown payDropdown; // 払う資源を選ぶドロップダウン
     public TMP_Dropdown getDropdown; // もらう資源を選ぶドロップダウン
+
+    [Header("対人トレードUI")]
+    public GameObject tradePanel;      // トレード画面全体のパネル（透明度80%の背景）
+    public GameObject offerUI;         // 「提案を作る」部分のグループ
+    public GameObject approveUI;       // 「承認を待つ」部分のグループ
+    public TextMeshProUGUI approveText;// 「〇〇を渡すので〇〇をください」という確認テキスト
+
+    public TMP_Dropdown targetPlayerDropdown; // 誰と取引するか選ぶドロップダウン
+    public TextMeshProUGUI offerSummaryText; // 【新規】現在の提案内容を文字で表示する用
+
+    // （1=木, 2=レンガ, 3=羊, 4=麦, 5=鉄）
+    private int[] tradeGive = new int[6]; 
+    private int[] tradeGet = new int[6];
+    // ▼ 今回のトレードの「約束の内容」を一時的に覚えておく変数 ▼
+    private int tradeTargetPlayer = -1;
+    private ResourceType tradePayRes;
+    private ResourceType tradeGetRes;
+
+    public TextMeshProUGUI targetInventoryText;
 
     [Header("盗賊システム")]
     public GameObject robberPrefab;
@@ -250,9 +281,16 @@ public class GameManager : MonoBehaviour
     public void EndTurn()
     {
         if (isGameOver) return;
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("まだターンを終了できません！（先にサイコロを振ってください）");
+            PlaySound(errorSound);
+            return;
+        }
         currentPlayerIndex++;
         if (currentPlayerIndex >= playerMaterials.Length) currentPlayerIndex = 0;
-        
+        currentState = GameState.WaitingForRoll;
+        hasRollDice = false;
         ShowPopup("ターン終了！次は プレイヤー " + (currentPlayerIndex + 1) + " の番です。");
         Debug.Log("ターン終了！次は プレイヤー " + (currentPlayerIndex + 1) + " の番です。");
 
@@ -263,13 +301,15 @@ public class GameManager : MonoBehaviour
     {
         if (isGameOver) return;
         //盗賊待ちでサイコロをはじく
-        if (isWaitingForRobber)
+        if (currentState != GameState.WaitingForRoll)
         {
-            ShowPopup("【警告】先にタイルをクリックして、盗賊を移動させてください！");
-            Debug.Log("【警告】先にタイルをクリックして、盗賊を移動させてください！");
-            PlaySound(errorSound);
+            ShowPopup("今はサイコロを振れません！（すでに振ったか、他のアクション中です）");
+            PlaySound(errorSound);            
             return; 
         }
+
+        hasRollDice = true;
+
         int dice1 = Random.Range(1, 7);
         int dice2 = Random.Range(1, 7);
         int total = dice1 + dice2;
@@ -286,6 +326,7 @@ public class GameManager : MonoBehaviour
             ShowPopup("盗賊が出た！移動させるタイルをクリックしてください。");
             Debug.Log("盗賊が出た！移動させるタイルをクリックしてください。");
             isWaitingForRobber = true; // クリック待ちモードON
+            currentState = GameState.RobberMoving;
             return;
         }
 
@@ -296,6 +337,8 @@ public class GameManager : MonoBehaviour
                 hex.DistributeResources();
             }
         }
+        currentState = GameState.MainAction;
+        UpdateUI();
     }
 
     public void AddResource(int playerIndex, TerrainType terrain, int amount)
@@ -324,6 +367,12 @@ public class GameManager : MonoBehaviour
 
     public bool TryPayRoadCost()
     {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このアクションはサイコロを振った後にしかできません！");
+            PlaySound(errorSound);
+            return false; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
+        }
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
         if (inv[ResourceType.Wood] >= 1 && inv[ResourceType.Brick] >= 1)
         {
@@ -341,6 +390,12 @@ public class GameManager : MonoBehaviour
 
     public bool TryPaySettlementCost()
     {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このアクションはサイコロを振った後にしかできません！");
+            PlaySound(errorSound);
+            return false; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
+        }
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
         if (inv[ResourceType.Wood] >= 1 && inv[ResourceType.Brick] >= 1 &&
             inv[ResourceType.Grain] >= 1 && inv[ResourceType.Wool] >= 1)
@@ -362,6 +417,12 @@ public class GameManager : MonoBehaviour
     // 【追加】都市（City）のコストが支払えるか確認し、可能なら支払う
     public bool TryPayCityCost()
     {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このアクションはサイコロを振った後にしかできません！");
+            PlaySound(errorSound);
+            return false; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
+        }
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
 
         // 鉄3、麦2 があるかチェック
@@ -429,7 +490,9 @@ public class GameManager : MonoBehaviour
         // 画面に表示する文字列を組み立てる
         string armyText = (playerWithLargestArmy == currentPlayerIndex) ? " 最大騎士力" : "";
         string roadText = (playerWithLongestRoad == currentPlayerIndex) ? " 最長交易路" : "";
-
+        string stateText = "";
+        if (currentState == GameState.WaitingForRoll) stateText = "【サイコロを振ってください】";
+        else if (currentState == GameState.MainAction) stateText = "【建設・交易フェーズ】";
         string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】★現在: {vp}点 / 10点 {armyText}{roadText}\n";
         uiText += $"木: {inv[ResourceType.Wood]}  |  ";
         uiText += $"レンガ: {inv[ResourceType.Brick]}  |  ";
@@ -514,7 +577,16 @@ public class GameManager : MonoBehaviour
             ShowPopup("周囲に他のプレイヤーの村がないため、誰も襲えませんでした。");
             Debug.Log("周囲に他のプレイヤーの村がないため、誰も襲えませんでした。");
         }
-        // ▲▲▲ ここまで追加 ▲▲▲
+
+        if (hasRollDice)
+        {
+            currentState = GameState.MainAction;
+        }
+        else
+        {
+            currentState = GameState.WaitingForRoll;
+        }
+        UpdateUI();
     }
 
     // 【新規追加】実際にAさんがBさんから資源を1つ奪うメソッド
@@ -555,6 +627,12 @@ public class GameManager : MonoBehaviour
     // 【新規追加】発展カードを購入する処理
     public void BuyDevelopmentCard()
     {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このアクションはサイコロを振った後にしかできません！");
+            PlaySound(errorSound);
+            return; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
+        }
         if (devCardDeck.Count == 0)
         {
             ShowPopup("発展カードの山札がもうありません！");
@@ -607,7 +685,7 @@ public class GameManager : MonoBehaviour
     public void UseKnightCard()
     {
         // 既にサイコロで7を出して移動待ちの場合は使えないようにする
-        if (isWaitingForRobber) 
+        if (currentState == GameState.RobberMoving || isWaitingForRobber) 
         {
             ShowPopup("現在はすでに盗賊の移動待ちです！");
             Debug.Log("現在はすでに盗賊の移動待ちです！");
@@ -622,6 +700,7 @@ public class GameManager : MonoBehaviour
             players[currentPlayerIndex].devCards[DevCardType.Knight]--;
 
             // ▼▼▼ 魔法の1行！これだけで盗賊モードに突入します ▼▼▼
+            currentState = GameState.RobberMoving;
             isWaitingForRobber = true; 
             players[currentPlayerIndex].playedKnights++; // 使った回数を増やす
             CheckLargestArmy(currentPlayerIndex);
@@ -793,6 +872,12 @@ public class GameManager : MonoBehaviour
     // 【新規追加】資源のトレード（交換）を実行する
      public void TradeResources(ResourceType payRes, ResourceType getRes)
     {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このアクションはサイコロを振った後にしかできません！");
+            PlaySound(errorSound);
+            return; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
+        }
         PlayerData pData = players[currentPlayerIndex];
 
         // 【確実なコスト計算アルゴリズム】
@@ -827,14 +912,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // 【テスト用のボタン呼び出しメソッド】
-    // ※Unityのボタン機能は2つの引数(payとget)を直接渡せないので、お試し用のメソッドを用意します。
-    //public void TestTradeWoodForOre()
-    // {
-    //     // 「木」を払って「鉄」をもらうテスト
-    //     TradeResources(ResourceType.Wood, ResourceType.Ore);
-    // }
-
+   
     // 【新規追加】画面のドロップダウンの選択を読み取ってトレードを実行する
     public void ExecuteTradeFromUI()
     {
@@ -884,6 +962,174 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(2.0f); // 【魔法の1行】ここで2秒間待機する
 
         popupText.gameObject.SetActive(false); // 2秒経ったら文字を隠す！
+    }
+
+    // 【新規追加】トレード画面を開く（メインアクション中のみ可能）
+    // ▼▼▼ トレード画面を開く処理の修正 ▼▼▼
+    public void OpenTradeWindow()
+    {
+        if (currentState != GameState.MainAction)
+                {
+                    ShowPopup("このアクションはサイコロを振った後にしかできません！");
+                    PlaySound(errorSound);
+                    return; 
+                }
+        currentState = GameState.Trading;
+        tradePanel.SetActive(true);       
+        offerUI.SetActive(true);          
+        approveUI.SetActive(false);       
+        
+        // 提案内容をリセット
+        tradeGive = new int[6];
+        tradeGet = new int[6];
+        UpdateOfferSummary(); // 画面の文字を更新
+        OnTargetPlayerChanged();
+    }
+    public void OnTargetPlayerChanged()
+    {
+        int target = targetPlayerDropdown.value;
+        if (target == currentPlayerIndex)
+        {
+            targetInventoryText.text = "（自分自身です）";
+            return;
+        }
+
+        // 相手の資源をテキスト化
+        string invStr = $"【プレイヤー {target + 1} の手持ち】\n";
+        for (int i = 1; i <= 5; i++)
+        {
+            int count = players[target].inventory[(ResourceType)i];
+            if (count > 0) invStr += $"{(ResourceType)i}: {count}個\n";
+        }
+        targetInventoryText.text = invStr;
+    }
+    // ▼▼▼ 数の増減メソッド（新規追加） ▼▼▼
+    // resType には 1(木) ～ 5(鉄) の数字を渡す
+    public void AddTradeGive(int resType)
+    {
+        // 自分の所持数を超えて提案できないようにする
+        if (players[currentPlayerIndex].inventory[(ResourceType)resType] > tradeGive[resType])
+        {
+            tradeGive[resType]++;
+            UpdateOfferSummary();
+        }
+        else PlaySound(errorSound);
+    }
+    public void RemoveTradeGive(int resType)
+    {
+        if (tradeGive[resType] > 0) { tradeGive[resType]--; UpdateOfferSummary(); }
+    }
+    public void AddTradeGet(int resType)
+    {
+        tradeGet[resType]++; UpdateOfferSummary();
+    }
+    public void RemoveTradeGet(int resType)
+    {
+        if (tradeGet[resType] > 0) { tradeGet[resType]--; UpdateOfferSummary(); }
+    }
+
+    // 現在の提案内容をテキストにまとめる
+    private void UpdateOfferSummary()
+    {
+        string giveStr = "", getStr = "";
+        for (int i = 1; i <= 5; i++)
+        {
+            if (tradeGive[i] > 0) giveStr += $"{(ResourceType)i} x{tradeGive[i]} ";
+            if (tradeGet[i] > 0) getStr += $"{(ResourceType)i} x{tradeGet[i]} ";
+        }
+        if (giveStr == "") giveStr = "なし";
+        if (getStr == "") getStr = "なし";
+
+        if (offerSummaryText != null)
+        {
+            offerSummaryText.text = $"【出す資源】\n{giveStr}\n\n【欲しい資源】\n{getStr}";
+        }
+    }
+
+    // 【新規追加】トレードをキャンセルして画面を閉じる
+    public void CancelTrade()
+    {
+        currentState = GameState.MainAction; // 状態を元に戻す
+        tradePanel.SetActive(false);         // パネルを隠す
+        PlaySound(buttonClickSound);
+    }
+    // 【新規追加】選んだ条件で相手にオファーを出す
+    public void SendTradeOffer()
+    {
+        tradeTargetPlayer = targetPlayerDropdown.value; 
+
+        if (tradeTargetPlayer == currentPlayerIndex)
+        {
+            ShowPopup("自分自身とはトレードできません！");
+            PlaySound(errorSound); return;
+        }
+        for (int i = 1; i <= 5; i++)
+        {
+            if (tradeGive[i] > 0 && tradeGet[i] > 0)
+            {
+                ShowPopup($"同じ資源（{(ResourceType)i}）を同時に出す・貰うことはできません！");
+                PlaySound(errorSound);
+                return;
+            }
+        }
+        // 提案が空っぽでないかチェック
+        int totalGive = 0, totalGet = 0;
+        for (int i = 1; i <= 5; i++) { totalGive += tradeGive[i]; totalGet += tradeGet[i]; }
+        if (totalGive == 0 || totalGet == 0)
+        {
+            ShowPopup("出す資源と欲しい資源をそれぞれ1つ以上設定してください！");
+            PlaySound(errorSound); return;
+        }
+
+        PlaySound(buttonClickSound);
+        offerUI.SetActive(false);
+        approveUI.SetActive(true);
+
+        // 相手へのメッセージを作成（UpdateOfferSummaryの文字列を再利用）
+        approveText.text = $"【プレイヤー {tradeTargetPlayer + 1} へ】\n" +
+                           $"以下のトレードを承認しますか？\n\n" +
+                           $"{offerSummaryText.text}"; 
+    }
+
+    public void AcceptTrade()
+    {
+        // 相手が要求された資源をすべて持っているか確認
+        for (int i = 1; i <= 5; i++)
+        {
+            if (players[tradeTargetPlayer].inventory[(ResourceType)i] < tradeGet[i])
+            {
+                ShowPopup($"プレイヤー {tradeTargetPlayer + 1} は「{(ResourceType)i}」が足りません！");
+                PlaySound(errorSound);
+                DeclineTrade();
+                return;
+            }
+        }
+
+        // トレード成立！（ループで全種類の資源を足し引き）
+        for (int i = 1; i <= 5; i++)
+        {
+            players[currentPlayerIndex].inventory[(ResourceType)i] -= tradeGive[i];
+            players[currentPlayerIndex].inventory[(ResourceType)i] += tradeGet[i];
+            
+            players[tradeTargetPlayer].inventory[(ResourceType)i] -= tradeGet[i];
+            players[tradeTargetPlayer].inventory[(ResourceType)i] += tradeGive[i];
+        }
+
+        PlaySound(tradeSound);
+        ShowPopup("トレード成立！");
+        UpdateUI();
+        CancelTrade(); 
+    }
+    
+    // 【新規追加】相手が「拒否（NO）」を押した時
+    public void DeclineTrade()
+    {
+        ShowPopup("トレードが拒否（またはキャンセル）されました。");
+        PlaySound(errorSound);
+        
+        // 提案画面に戻す（条件を変えて再提案できるようにする）
+        approveUI.SetActive(false);
+        offerUI.SetActive(true);
     }
 
     // 【新規追加】タイトル画面に戻るメソッド
