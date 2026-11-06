@@ -5312,8 +5312,11 @@ MonoBehaviour:
   - {fileID: 2100000, guid: 44852e71922ddaf4eb26db27acddaa94, type: 2}
   - {fileID: 2100000, guid: a3bd75f63060d9c46b40b0a71778846f, type: 2}
   currentPlayerIndex: 0
-  currentState: 1
+  currentState: 0
   hasRollDice: 0
+  setupRound: 1
+  isPlacingSetupRoad: 0
+  lastPlacedSetupNode: {fileID: 0}
   resourceText: {fileID: 182052646}
   popupText: {fileID: 1487093405}
   payDropdown: {fileID: 443055610}

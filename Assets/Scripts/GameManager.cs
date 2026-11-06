@@ -69,11 +69,13 @@ public class GameManager : MonoBehaviour
     
     [Header("現在の状態")]
     public int currentPlayerIndex = 0;
-    public GameState currentState = GameState.WaitingForRoll;
+    public GameState currentState = GameState.Setup;
     public bool hasRollDice = false;
 
     public PlayerData[] players = new PlayerData[4];
-
+    public int setupRound = 1; // 1週目(1->2->3->4) か 2週目(4->3->2->1) か
+    public bool isPlacingSetupRoad = false; // 村を置いた後、道を置くのを待っているか
+    public Intersection lastPlacedSetupNode = null;
     // 【追加】画面に表示するUIテキストの枠
     [Header("UI設定")]
     public TextMeshProUGUI resourceText; 
@@ -175,6 +177,9 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
+        currentState = GameState.Setup;
+        setupRound = 1;
+        isPlacingSetupRoad = false;
         UpdateUI(); 
         // ゲーム開始時に1回だけ、ボード上の全タイルを探して記憶しておく
         allHexes = FindObjectsByType<HexTile>(FindObjectsSortMode.None);
@@ -258,7 +263,7 @@ public class GameManager : MonoBehaviour
     // 【新規メソッド追加】砂漠を探して初期配置する
     void InitializeRobber()
     {
-        HexTile[] allHexes = FindObjectsOfType<HexTile>();
+        HexTile[] allHexes = FindObjectsByType<HexTile>(FindObjectsSortMode.None);
         foreach(HexTile hex in allHexes) 
         {
             if (hex.terrainType == TerrainType.Desert) 
@@ -297,6 +302,41 @@ public class GameManager : MonoBehaviour
         UpdateUI(); // ターンが変わったので文字を更新
     }
 
+    // 【新規追加】初期配置フェーズのターン送り
+    public void AdvanceSetupTurn()
+    {
+        isPlacingSetupRoad = false; // 次の人はまた「村」からスタート
+
+        if (setupRound == 1)
+        {
+            if (currentPlayerIndex < players.Length - 1)
+            {
+                currentPlayerIndex++; // 1->2->3->4 と進む
+            }
+            else
+            {
+                setupRound = 2; // 4番手のまま2週目へ突入
+            }
+        }
+        else if (setupRound == 2)
+        {
+            if (currentPlayerIndex > 0)
+            {
+                currentPlayerIndex--; // 4->3->2->1 と戻る
+            }
+            else
+            {
+                // 1番手まで戻ってきたら初期配置終了！いよいよゲームスタート
+                currentState = GameState.WaitingForRoll;
+                ShowPopup("初期配置が完了しました！プレイヤー 1 はサイコロを振ってください。");
+                UpdateUI();
+                return;
+            }
+        }
+
+        UpdateUI();
+        ShowPopup($"プレイヤー {currentPlayerIndex + 1} の番です。まずは村を配置してください。");
+    }
     public void RollDice()
     {
         if (isGameOver) return;
@@ -339,6 +379,18 @@ public class GameManager : MonoBehaviour
         }
         currentState = GameState.MainAction;
         UpdateUI();
+    }
+
+    public void GiveInitialResources(Intersection node, int playerIndex)
+    {
+        HexTile[] hexes = FindObjectsByType<HexTile>(FindObjectsSortMode.None);
+        foreach (HexTile hex in hexes)
+        {
+            if (hex.terrainType != TerrainType.Desert && hex.adjacentNodes.Contains(node))
+            {
+                AddResource(playerIndex, hex.terrainType, 1);
+            }
+        }
     }
 
     public void AddResource(int playerIndex, TerrainType terrain, int amount)
@@ -491,9 +543,13 @@ public class GameManager : MonoBehaviour
         string armyText = (playerWithLargestArmy == currentPlayerIndex) ? " 最大騎士力" : "";
         string roadText = (playerWithLongestRoad == currentPlayerIndex) ? " 最長交易路" : "";
         string stateText = "";
-        if (currentState == GameState.WaitingForRoll) stateText = "【サイコロを振ってください】";
+        if (currentState == GameState.Setup)
+        {
+            stateText = isPlacingSetupRoad ? $"【初期配置({setupRound}巡目)：道を置いてください】" : $"【初期配置({setupRound}巡目)：村を置いてください】";
+        }
+        else if (currentState == GameState.WaitingForRoll) stateText = "【サイコロを振ってください】";
         else if (currentState == GameState.MainAction) stateText = "【建設・交易フェーズ】";
-        string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】★現在: {vp}点 / 10点 {armyText}{roadText}\n";
+        string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】{stateText}\n★現在: {vp}点 / 10点 {armyText}{roadText}\n";
         uiText += $"木: {inv[ResourceType.Wood]}  |  ";
         uiText += $"レンガ: {inv[ResourceType.Brick]}  |  ";
         uiText += $"麦: {inv[ResourceType.Grain]}  |  ";

@@ -51,6 +51,52 @@ public class Road : MonoBehaviour
     {
         int currentPlayer = GameManager.Instance.currentPlayerIndex;
 
+        // ▼▼▼ 初期配置（Setup）フェーズの処理 ▼▼▼
+        if (GameManager.Instance.currentState == GameState.Setup)
+        {
+            if (!GameManager.Instance.isPlacingSetupRoad)
+            {
+                GameManager.Instance.ShowPopup("まずは村を配置してください！");
+                GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
+                return;
+            }
+
+            if (ownerID != -1) 
+            { 
+                GameManager.Instance.ShowPopup("すでに道があります！"); 
+                GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
+                return; 
+            }
+
+            // 【カタンの重要ルール】今置いたばかりの村に接続しているかチェック！
+            if (!connectedNodes.Contains(GameManager.Instance.lastPlacedSetupNode))
+            {
+                GameManager.Instance.ShowPopup("今配置したばかりの村に隣接する道を選んでください！");
+                GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
+                return;
+            }
+
+            // コストを支払わず強制的に建築！
+            ownerID = currentPlayer;
+            myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
+            GameManager.Instance.PlaySound(GameManager.Instance.buildRoadSound);
+            GameManager.Instance.ShowPopup("初期配置の道を引きました！");
+            
+            // 最長交易路のチェック（念のため）
+            GameManager.Instance.CheckLongestRoad(currentPlayer);
+
+            // 道を引いたら次の人に手番を回す
+            GameManager.Instance.AdvanceSetupTurn();
+            return; 
+        }
+        else if (GameManager.Instance.currentState != GameState.MainAction)
+        {
+            GameManager.Instance.ShowPopup("今は建設できません！（先にサイコロを振ってください）");
+            GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
+            return;
+        }
+
+        // --- ここから下は通常のゲーム中（MainAction）の処理（既存のまま） ---
         if (ownerID != -1) 
         { 
             GameManager.Instance.ShowPopup("すでに道があります！"); 
@@ -69,22 +115,18 @@ public class Road : MonoBehaviour
             Debug.Log("自分の村や道に繋がっていません！"); 
             GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
             return; 
-            }
-
-        // ▼▼▼ ここから追加・変更 ▼▼▼
-        // ルール3：コストの支払い（GameManagerに決済を依頼する）
-        if (!GameManager.Instance.TryPayRoadCost())
-        {
-            return; // 支払い失敗で中断
         }
 
-        // 決済に成功したら建設！
+        if (!GameManager.Instance.TryPayRoadCost())
+        {
+            return; 
+        }
+
         ownerID = currentPlayer;
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         GameManager.Instance.ShowPopup("道を引きました！");
         Debug.Log(gameObject.name + " に道を引きました！");
         
-        // 道を引くたびに、最長交易路のチェックを実行する！
         GameManager.Instance.CheckLongestRoad(currentPlayer);
     }
 }
