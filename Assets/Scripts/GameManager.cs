@@ -16,6 +16,7 @@ public enum GameState
     WaitingForRoll, // サイコロを振る前
     MainAction,     // サイコロを振った後（家を建てたりトレードできる）
     Trading,
+    Discarding,
     RobberMoving,   // 盗賊の移動待ち（7が出た時や騎士を使った時）
     GameOver        // ゲーム終了
 }
@@ -104,6 +105,16 @@ public class GameManager : MonoBehaviour
     private ResourceType tradeGetRes;
 
     public TextMeshProUGUI targetInventoryText;
+
+    [Header("バースト（資源半減）UI")]
+    public GameObject discardPanel;           // バースト画面全体のパネル
+    public TextMeshProUGUI discardInstructionText; // 「プレイヤーX：あと〇枚選んでください」の案内
+    public TextMeshProUGUI discardSummaryText;     // 現在選んでいる資源と手持ちの表示
+
+    private Queue<int> burstPlayersQueue = new Queue<int>(); // バーストした人を順番に並べる列
+    private int currentBurstPlayer = -1;      // 今まさに捨てる資源を選んでいるプレイヤー
+    private int requiredDiscardCount = 0;     // 捨てなければならない合計枚数
+    private int[] discardAmounts = new int[6];// 各資源を何枚捨てるか（1=木 ～ 5=鉄）
 
     [Header("盗賊システム")]
     public GameObject robberPrefab;
@@ -363,10 +374,36 @@ public class GameManager : MonoBehaviour
 
         if (total == 7)
         {
-            ShowPopup("盗賊が出た！移動させるタイルをクリックしてください。");
-            Debug.Log("盗賊が出た！移動させるタイルをクリックしてください。");
-            isWaitingForRobber = true; // クリック待ちモードON
-            currentState = GameState.RobberMoving;
+            // バースト判定
+            burstPlayersQueue.Clear();
+
+            for (int i = 0; i < players.Length; i++)
+            {
+                int totalCards = 0;
+                foreach (var count in players[i].inventory.Values) totalCards += count;
+
+                // 手札が8枚以上のプレイヤーを待ち行列（Queue）に追加
+                if (totalCards >= 8)
+                {
+                    burstPlayersQueue.Enqueue(i);
+                }
+            }
+
+            // バーストした人が1人でもいれば、廃棄フェーズへ移行
+            if (burstPlayersQueue.Count > 0)
+            {
+                currentState = GameState.Discarding;
+                ProcessNextBurstPlayer();
+            }
+            else
+            {
+                // 誰もバーストしていなければ、そのまま盗賊の移動へ
+                ShowPopup("7が出ました！盗賊を移動させるタイルをクリックしてください。");
+                Debug.Log("7が出ました！盗賊を移動させるタイルをクリックしてください。");
+                isWaitingForRobber = true;
+                currentState = GameState.RobberMoving;
+            }
+            UpdateUI();
             return;
         }
 
@@ -549,6 +586,7 @@ public class GameManager : MonoBehaviour
         }
         else if (currentState == GameState.WaitingForRoll) stateText = "【サイコロを振ってください】";
         else if (currentState == GameState.MainAction) stateText = "【建設・交易フェーズ】";
+        else if (currentState == GameState.Discarding) stateText = "【バースト：資源廃棄待ち】";
         string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】{stateText}\n★現在: {vp}点 / 10点 {armyText}{roadText}\n";
         uiText += $"木: {inv[ResourceType.Wood]}  |  ";
         uiText += $"レンガ: {inv[ResourceType.Brick]}  |  ";
@@ -1207,5 +1245,128 @@ public class GameManager : MonoBehaviour
     public void PlayClickSound()
     {
         PlaySound(buttonClickSound);
+    }
+
+    // =========================================================
+    // バーストシステム 
+    // =========================================================
+
+    // 次のバースト対象者の画面を開く
+    private void ProcessNextBurstPlayer()
+    {
+        if (burstPlayersQueue.Count > 0)
+        {
+            currentBurstPlayer = burstPlayersQueue.Dequeue(); // 列の先頭から1人取り出す
+
+            int totalCards = 0;
+            foreach (var count in players[currentBurstPlayer].inventory.Values) totalCards += count;
+
+            requiredDiscardCount = totalCards / 2; // 切り捨てで半分（例：8枚なら4枚、9枚なら4枚）
+            discardAmounts = new int[6];           // 選択状態をリセット
+
+            discardPanel.SetActive(true);
+            UpdateDiscardUI();
+            ShowPopup($"バースト！プレイヤー {currentBurstPlayer + 1} は資源を {requiredDiscardCount} 枚捨ててください。");
+        }
+        else
+        {
+            // 全員の廃棄が終わったらパネルを閉じて盗賊移動へ！
+            discardPanel.SetActive(false);
+            currentState = GameState.RobberMoving;
+            isWaitingForRobber = true;
+            ShowPopup("全員の廃棄が完了しました！盗賊を移動させるタイルをクリックしてください。");
+            UpdateUI();
+        }
+    }
+
+    // 捨てる資源を増やす（ボタンの OnClick から 1～5 を指定して呼ぶ）
+    public void AddDiscard(int resType)
+    {
+        int currentSelectedTotal = 0;
+        for (int i = 1; i <= 5; i++) currentSelectedTotal += discardAmounts[i];
+
+        // まだ必要枚数に達しておらず、かつその資源を手札に持っているなら増やせる
+        if (currentSelectedTotal < requiredDiscardCount &&
+            players[currentBurstPlayer].inventory[(ResourceType)resType] > discardAmounts[resType])
+        {
+            discardAmounts[resType]++;
+            PlaySound(buttonClickSound);
+            UpdateDiscardUI();
+        }
+        else
+        {
+            PlaySound(errorSound);
+        }
+    }
+
+    // 捨てる資源を減らす（ボタンの OnClick から 1～5 を指定して呼ぶ）
+    public void RemoveDiscard(int resType)
+    {
+        if (discardAmounts[resType] > 0)
+        {
+            discardAmounts[resType]--;
+            PlaySound(buttonClickSound);
+            UpdateDiscardUI();
+        }
+        else
+        {
+            PlaySound(errorSound);
+        }
+    }
+
+    // バースト画面のテキスト更新
+    private void UpdateDiscardUI()
+    {
+        int currentSelectedTotal = 0;
+        for (int i = 1; i <= 5; i++) currentSelectedTotal += discardAmounts[i];
+        int remaining = requiredDiscardCount - currentSelectedTotal;
+
+        if (discardInstructionText != null)
+        {
+            discardInstructionText.text = $"【バースト発生！】\n" +
+                                          $"プレイヤー {currentBurstPlayer + 1} は手札が8枚以上あるため、\n" +
+                                          $"合計 {requiredDiscardCount} 枚の資源を捨てなければなりません。\n" +
+                                          $"（あと {remaining} 枚選んでください）";
+        }
+
+        if (discardSummaryText != null)
+        {
+            string statusStr = "【現在の手持ち と 捨てる数】\n";
+            for (int i = 1; i <= 5; i++)
+            {
+                ResourceType r = (ResourceType)i;
+                int have = players[currentBurstPlayer].inventory[r];
+                int disc = discardAmounts[i];
+                statusStr += $"{r} : 所持 {have} 個  ➔  捨てる: {disc} 個\n";
+            }
+            discardSummaryText.text = statusStr;
+        }
+    }
+
+    // 「確定」ボタンを押した時の処理
+    public void ConfirmDiscard()
+    {
+        int currentSelectedTotal = 0;
+        for (int i = 1; i <= 5; i++) currentSelectedTotal += discardAmounts[i];
+
+        // ぴったりの枚数を選んでいなければエラー
+        if (currentSelectedTotal != requiredDiscardCount)
+        {
+            ShowPopup($"まだ枚数が足りません！ちょうど {requiredDiscardCount} 枚選んでください。");
+            PlaySound(errorSound);
+            return;
+        }
+
+        // 実際に資源を減らす
+        for (int i = 1; i <= 5; i++)
+        {
+            players[currentBurstPlayer].inventory[(ResourceType)i] -= discardAmounts[i];
+        }
+
+        PlaySound(tradeSound); // 確定音
+        UpdateUI();
+
+        // 次のバースト対象者へ（いなければ盗賊移動へ自動で進む）
+        ProcessNextBurstPlayer();
     }
 }
