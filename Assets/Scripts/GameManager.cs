@@ -27,6 +27,9 @@ public class PlayerData
     public int victoryPoints = 0;
     public int playedKnights = 0;
     
+    public int remainingRoads = 15;       // 道は最大15本
+    public int remainingSettlements = 5;  // 村は最大5個
+    public int remainingCities = 4;       // 都市は最大4個
     public Dictionary<ResourceType, int> inventory = new Dictionary<ResourceType, int>()
     {
         { ResourceType.Wood, 0 },
@@ -125,6 +128,7 @@ public class GameManager : MonoBehaviour
     // 既存の変数の下あたりに追加
     [Header("発展カード")]
     public List<DevCardType> devCardDeck = new List<DevCardType>();
+    public int freeRoadsToBuild = 0;
 
     [Header("特別称号")]
     public int playerWithLargestArmy = -1;  // 現在の「最大騎士力」保持者(-1は誰もいない)
@@ -462,11 +466,18 @@ public class GameManager : MonoBehaviour
             PlaySound(errorSound);
             return false; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
         }
+        if (players[currentPlayerIndex].remainingRoads <= 0)
+        {
+            ShowPopup("これ以上『道』を建設できません！（上限15本）");
+            PlaySound(errorSound);
+            return false;
+        }
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
         if (inv[ResourceType.Wood] >= 1 && inv[ResourceType.Brick] >= 1)
         {
             inv[ResourceType.Wood] -= 1;
             inv[ResourceType.Brick] -= 1;
+            players[currentPlayerIndex].remainingRoads--;
             UpdateUI(); // 資源を支払ったので文字を更新
             PlaySound(buildRoadSound);
             return true;
@@ -485,6 +496,12 @@ public class GameManager : MonoBehaviour
             PlaySound(errorSound);
             return false; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
         }
+        if (players[currentPlayerIndex].remainingSettlements <= 0)
+        {
+            ShowPopup("これ以上『開拓地（村）』を建設できません！（上限5個。都市化すると戻ります）");
+            PlaySound(errorSound);
+            return false;
+        }
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
         if (inv[ResourceType.Wood] >= 1 && inv[ResourceType.Brick] >= 1 &&
             inv[ResourceType.Grain] >= 1 && inv[ResourceType.Wool] >= 1)
@@ -493,6 +510,7 @@ public class GameManager : MonoBehaviour
             inv[ResourceType.Brick] -= 1;
             inv[ResourceType.Grain] -= 1;
             inv[ResourceType.Wool] -= 1;
+            players[currentPlayerIndex].remainingSettlements--;
             UpdateUI(); // 資源を支払ったので文字を更新
             PlaySound(buildSettlementSound);
             return true;
@@ -512,6 +530,12 @@ public class GameManager : MonoBehaviour
             PlaySound(errorSound);
             return false; // ※ TradeResources や BuyDevelopmentCard の場合は return; だけ
         }
+        if (players[currentPlayerIndex].remainingCities <= 0)
+        {
+            ShowPopup("これ以上『都市』を建設できません！（上限4個）");
+            PlaySound(errorSound);
+            return false;
+        }
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
 
         // 鉄3、麦2 があるかチェック
@@ -519,6 +543,8 @@ public class GameManager : MonoBehaviour
         {
             inv[ResourceType.Ore] -= 3;
             inv[ResourceType.Grain] -= 2;
+            players[currentPlayerIndex].remainingCities--;      // ★都市コマを1つ減らす
+            players[currentPlayerIndex].remainingSettlements++;
             UpdateUI();
             PlaySound(buildCitySound); 
             return true;
@@ -539,7 +565,7 @@ public class GameManager : MonoBehaviour
         players[p].inventory[ResourceType.Grain] += 10;
         players[p].inventory[ResourceType.Wool] += 10;
         players[p].inventory[ResourceType.Ore] += 10;
-
+        players[p].devCards[DevCardType.RoadBuilding] += 1;
         UpdateUI(); // チートで資源が増えたので文字を更新
         ShowPopup("チートにより資源を獲得しました。");
         Debug.Log("チートにより資源を獲得しました。");
@@ -569,6 +595,7 @@ public class GameManager : MonoBehaviour
     }
 
     // 【新規】画面の文字（UI）を現在の状況に合わせて書き換えるメソッド
+   // 【新規】画面の文字（UI）を現在の状況に合わせて書き換えるメソッド
     public void UpdateUI()
     {
         // テキスト枠が設定されていなければ無視する
@@ -576,9 +603,10 @@ public class GameManager : MonoBehaviour
 
         Dictionary<ResourceType, int> inv = players[currentPlayerIndex].inventory;
         int vp = players[currentPlayerIndex].victoryPoints; // 現在の得点を取得
-        // 画面に表示する文字列を組み立てる
+        
         string armyText = (playerWithLargestArmy == currentPlayerIndex) ? " 最大騎士力" : "";
         string roadText = (playerWithLongestRoad == currentPlayerIndex) ? " 最長交易路" : "";
+        
         string stateText = "";
         if (currentState == GameState.Setup)
         {
@@ -587,6 +615,8 @@ public class GameManager : MonoBehaviour
         else if (currentState == GameState.WaitingForRoll) stateText = "【サイコロを振ってください】";
         else if (currentState == GameState.MainAction) stateText = "【建設・交易フェーズ】";
         else if (currentState == GameState.Discarding) stateText = "【バースト：資源廃棄待ち】";
+
+        // 画面に表示する文字列を組み立てる
         string uiText = $"【 プレイヤー {currentPlayerIndex + 1} のターン 】{stateText}\n★現在: {vp}点 / 10点 {armyText}{roadText}\n";
         uiText += $"木: {inv[ResourceType.Wood]}  |  ";
         uiText += $"レンガ: {inv[ResourceType.Brick]}  |  ";
@@ -594,9 +624,13 @@ public class GameManager : MonoBehaviour
         uiText += $"羊: {inv[ResourceType.Wool]}  |  ";
         uiText += $"鉄: {inv[ResourceType.Ore]}";
 
-        int knights = players[currentPlayerIndex].devCards[DevCardType.Knight];
+        // ▼▼▼ 先ほどエラーになっていた箇所 ▼▼▼
+        var cards = players[currentPlayerIndex].devCards; // ← この1行が必須です！
         int playedKnights = players[currentPlayerIndex].playedKnights; 
-        uiText += $"\n【手札】騎士カード: {knights} 枚 (使用済み: {playedKnights} 枚)";
+
+        uiText += $"\n【発展カード】騎士:{cards[DevCardType.Knight]}(済:{playedKnights}) | 街道:{cards[DevCardType.RoadBuilding]} | 収穫:{cards[DevCardType.YearOfPlenty]} | 独占:{cards[DevCardType.Monopoly]}";
+        uiText += $"\n【残りコマ】道:{players[currentPlayerIndex].remainingRoads} | 村:{players[currentPlayerIndex].remainingSettlements} | 都市:{players[currentPlayerIndex].remainingCities}";
+
         // 実際の画面の文字を書き換える
         resourceText.text = uiText;
     }
@@ -808,6 +842,99 @@ public class GameManager : MonoBehaviour
             Debug.Log("騎士カードを持っていません！");
             PlaySound(errorSound);
         }
+    }
+
+    // 【新規追加】街道建設カード（無料で道を2本引ける）
+    public void UseRoadBuildingCard()
+    {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このカードはサイコロを振った後のメインフェーズにしか使えません！");
+            PlaySound(errorSound); return;
+        }
+        if (players[currentPlayerIndex].devCards[DevCardType.RoadBuilding] <= 0)
+        {
+            ShowPopup("『街道建設』カードを持っていません！");
+            PlaySound(errorSound); return;
+        }
+        if (players[currentPlayerIndex].remainingRoads <= 0)
+        {
+            ShowPopup("道の残りコマがないため使用できません！");
+            PlaySound(errorSound); return;
+        }
+
+        players[currentPlayerIndex].devCards[DevCardType.RoadBuilding]--;
+        // 残りコマが1本しかない場合は1本だけ無料にする
+        freeRoadsToBuild = Mathf.Min(2, players[currentPlayerIndex].remainingRoads);
+
+        PlaySound(buttonClickSound);
+        ShowPopup($"【街道建設】好きな場所に無料で道を {freeRoadsToBuild} 本引いてください！");
+        UpdateUI();
+    }
+
+    // 【新規追加】収穫カード（ドロップダウン2つで選ばれている資源を1個ずつ獲得）
+    public void UseYearOfPlentyCard()
+    {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このカードはサイコロを振った後のメインフェーズにしか使えません！");
+            PlaySound(errorSound); return;
+        }
+        if (players[currentPlayerIndex].devCards[DevCardType.YearOfPlenty] <= 0)
+        {
+            ShowPopup("『収穫』カードを持っていません！");
+            PlaySound(errorSound); return;
+        }
+
+        // 画面の2つのドロップダウンで選ばれている資源を取得（同じ資源2個でもOK！）
+        ResourceType res1 = (ResourceType)(payDropdown.value + 1);
+        ResourceType res2 = (ResourceType)(getDropdown.value + 1);
+
+        players[currentPlayerIndex].devCards[DevCardType.YearOfPlenty]--;
+        players[currentPlayerIndex].inventory[res1]++;
+        players[currentPlayerIndex].inventory[res2]++;
+
+        PlaySound(tradeSound);
+        ShowPopup($"【収穫】銀行から『{res1}』と『{res2}』を1個ずつ獲得しました！");
+        UpdateUI();
+    }
+
+    // 【新規追加】独占カード（getDropdownで選ばれている資源を全員から奪う）
+    public void UseMonopolyCard()
+    {
+        if (currentState != GameState.MainAction)
+        {
+            ShowPopup("このカードはサイコロを振った後のメインフェーズにしか使えません！");
+            PlaySound(errorSound); return;
+        }
+        if (players[currentPlayerIndex].devCards[DevCardType.Monopoly] <= 0)
+        {
+            ShowPopup("『独占』カードを持っていません！");
+            PlaySound(errorSound); return;
+        }
+
+        // 「もらう資源（getDropdown）」で選択されている資源をターゲットにする
+        ResourceType targetRes = (ResourceType)(getDropdown.value + 1);
+        players[currentPlayerIndex].devCards[DevCardType.Monopoly]--;
+
+        int totalStolen = 0;
+        for (int i = 0; i < players.Length; i++)
+        {
+            if (i != currentPlayerIndex)
+            {
+                int amount = players[i].inventory[targetRes];
+                if (amount > 0)
+                {
+                    players[i].inventory[targetRes] = 0;
+                    players[currentPlayerIndex].inventory[targetRes] += amount;
+                    totalStolen += amount;
+                }
+            }
+        }
+
+        PlaySound(tradeSound);
+        ShowPopup($"【独占】全員から『{targetRes}』をすべて回収し、合計 {totalStolen} 個獲得しました！");
+        UpdateUI();
     }
 
     // 【新規追加】最大騎士力の条件を満たしたかチェックする

@@ -51,7 +51,9 @@ public class Road : MonoBehaviour
     {
         int currentPlayer = GameManager.Instance.currentPlayerIndex;
 
-        // ▼▼▼ 初期配置（Setup）フェーズの処理 ▼▼▼
+        // ========================================================
+        // ▼▼▼ 1. 初期配置（Setup）フェーズの処理 ▼▼▼
+        // ========================================================
         if (GameManager.Instance.currentState == GameState.Setup)
         {
             if (!GameManager.Instance.isPlacingSetupRoad)
@@ -60,15 +62,12 @@ public class Road : MonoBehaviour
                 GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
                 return;
             }
-
             if (ownerID != -1) 
             { 
                 GameManager.Instance.ShowPopup("すでに道があります！"); 
                 GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
                 return; 
             }
-
-            // 【カタンの重要ルール】今置いたばかりの村に接続しているかチェック！
             if (!connectedNodes.Contains(GameManager.Instance.lastPlacedSetupNode))
             {
                 GameManager.Instance.ShowPopup("今配置したばかりの村に隣接する道を選んでください！");
@@ -76,16 +75,14 @@ public class Road : MonoBehaviour
                 return;
             }
 
-            // コストを支払わず強制的に建築！
+            // 初期配置なので【無条件で（カードも資源も使わず）】建築！
             ownerID = currentPlayer;
             myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
             GameManager.Instance.PlaySound(GameManager.Instance.buildRoadSound);
             GameManager.Instance.ShowPopup("初期配置の道を引きました！");
             
-            // 最長交易路のチェック（念のため）
+            GameManager.Instance.players[currentPlayer].remainingRoads--; // コマを1つ減らす
             GameManager.Instance.CheckLongestRoad(currentPlayer);
-
-            // 道を引いたら次の人に手番を回す
             GameManager.Instance.AdvanceSetupTurn();
             return; 
         }
@@ -96,11 +93,12 @@ public class Road : MonoBehaviour
             return;
         }
 
-        // --- ここから下は通常のゲーム中（MainAction）の処理（既存のまま） ---
+        // ========================================================
+        // ▼▼▼ 2. 通常のゲーム中（MainAction）の処理 ▼▼▼
+        // ========================================================
         if (ownerID != -1) 
         { 
             GameManager.Instance.ShowPopup("すでに道があります！"); 
-            Debug.Log("すでに道があります！"); 
             GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
             return; 
         }
@@ -112,20 +110,36 @@ public class Road : MonoBehaviour
         if (!isConnected) 
         { 
             GameManager.Instance.ShowPopup("自分の村や道に繋がっていません！"); 
-            Debug.Log("自分の村や道に繋がっていません！"); 
             GameManager.Instance.PlaySound(GameManager.Instance.errorSound);
             return; 
         }
 
-        if (!GameManager.Instance.TryPayRoadCost())
+        // --------------------------------------------------------
+        // 💡 質問いただいたのはここです！ここで「カード」か「資源」か判定します
+        // --------------------------------------------------------
+        if (GameManager.Instance.freeRoadsToBuild > 0)
         {
-            return; 
+            // パターンA：街道建設カードの効果中なら、無料で建設！
+            GameManager.Instance.freeRoadsToBuild--;
+            GameManager.Instance.players[currentPlayer].remainingRoads--; // コマを減らす
+            GameManager.Instance.PlaySound(GameManager.Instance.buildRoadSound);
+            GameManager.Instance.UpdateUI();
         }
+        else
+        {
+            // パターンB：カード効果がないなら、通常通り資源を支払う
+            // （※ TryPayRoadCost() の中でコマを減らす処理は実行されます）
+            if (!GameManager.Instance.TryPayRoadCost())
+            {
+                return; // 支払い失敗で中断
+            }
+        }
+        // --------------------------------------------------------
 
+        // 決済（カード消費 or 資源支払い）に成功したので、道を自分の色にする！
         ownerID = currentPlayer;
         myRenderer.material = GameManager.Instance.GetCurrentPlayerMaterial();
         GameManager.Instance.ShowPopup("道を引きました！");
-        Debug.Log(gameObject.name + " に道を引きました！");
         
         GameManager.Instance.CheckLongestRoad(currentPlayer);
     }

@@ -114,6 +114,7 @@ public class Intersection : MonoBehaviour
             transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
             GameManager.Instance.PlaySound(GameManager.Instance.buildSettlementSound);
             GameManager.Instance.AddVictoryPoint(currentPlayer);
+            GameManager.Instance.players[currentPlayer].remainingSettlements--;
 
             // 港の獲得判定
             if (portType == ResourceType.Any)
