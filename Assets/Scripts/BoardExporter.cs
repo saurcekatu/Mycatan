@@ -8,6 +8,10 @@ public class CatanNodeData
 {
     public int id;
     public float expected_yield;
+    public float x;
+    public float y;
+    public bool is_harbor;       // 追加: 港があるかどうか
+    public string port_type;
 }
 
 [System.Serializable]
@@ -18,10 +22,20 @@ public class CatanEdgeData
 }
 
 [System.Serializable]
+public class CatanHexData
+{
+    public int number; 
+    public float x;    
+    public float y;    
+    public string resource_type; // 【修正】ヘックス側に資源タイプを追加
+}
+
+[System.Serializable]
 public class CatanBoardData
 {
     public List<CatanNodeData> nodes = new List<CatanNodeData>();
     public List<CatanEdgeData> edges = new List<CatanEdgeData>();
+    public List<CatanHexData> hexes = new List<CatanHexData>();
 }
 
 public class BoardExporter : MonoBehaviour
@@ -43,7 +57,7 @@ public class BoardExporter : MonoBehaviour
         Intersection[] allIntersections = FindObjectsByType<Intersection>(FindObjectsSortMode.None);
         HexTile[] allHexes = FindObjectsByType<HexTile>(FindObjectsSortMode.None);
 
-        // 2. 交差点（ノード）に 0 から始まる一意の連番IDを振り、JSON用のリストに登録
+        // 2. 交差点（ノード）のデータ作成
         Dictionary<Intersection, int> nodeToId = new Dictionary<Intersection, int>();
         Dictionary<Intersection, CatanNodeData> nodeDataDict = new Dictionary<Intersection, CatanNodeData>();
 
@@ -54,7 +68,21 @@ public class BoardExporter : MonoBehaviour
             
             CatanNodeData data = new CatanNodeData();
             data.id = currentId;
-            data.expected_yield = 0f; // 初期値
+            data.expected_yield = 0f; 
+            data.x = node.transform.position.x;
+            data.y = node.transform.position.z; 
+            
+            // ↓↓ 追加: 港情報の取得 ↓↓
+            if (node.portType != ResourceType.None)
+            {
+                data.is_harbor = true;
+                data.port_type = node.portType.ToString();
+            }
+            else
+            {
+                data.is_harbor = false;
+                data.port_type = "None";
+            }
             
             nodeDataDict[node] = data;
             boardData.nodes.Add(data);
@@ -62,10 +90,19 @@ public class BoardExporter : MonoBehaviour
             currentId++;
         }
 
-        // 3. 期待値（資源の出やすさ）の計算
-        // 各地形タイルから、隣接する交差点に「ドット数（確率）」を配る
+        // 3. 地形タイル（ヘックス）データのエクスポート ＆ 期待値の計算
         foreach (HexTile hex in allHexes)
         {
+            // 【修正】Pythonで描画するためのヘックス情報を構築し、リストに追加
+            CatanHexData hexData = new CatanHexData();
+            hexData.number = hex.number;
+            hexData.x = hex.transform.position.x;
+            hexData.y = hex.transform.position.z;
+            hexData.resource_type = hex.terrainType.ToString();
+            
+            boardData.hexes.Add(hexData);
+
+            // 期待値（資源の出やすさ）を隣接ノードに配る
             if (hex.terrainType != TerrainType.Desert)
             {
                 int dots = GetProbabilityDots(hex.number);
@@ -91,7 +128,6 @@ public class BoardExporter : MonoBehaviour
                 
                 int idB = nodeToId[neighbor];
 
-                // 無向グラフとして重複を防ぐ（小さいID-大きいID という文字列で判定）
                 int minId = Mathf.Min(idA, idB);
                 int maxId = Mathf.Max(idA, idB);
                 string edgeKey = $"{minId}-{maxId}";
@@ -112,7 +148,7 @@ public class BoardExporter : MonoBehaviour
         string filePath = Path.Combine(Application.dataPath, "../CatanBoardData.json");
         File.WriteAllText(filePath, json);
 
-        Debug.Log($"【データ抽出完了】出力先: {filePath}\nノード数: {boardData.nodes.Count}, エッジ数: {boardData.edges.Count}");
+        Debug.Log($"【データ抽出完了】出力先: {filePath}\nノード数: {boardData.nodes.Count}, エッジ数: {boardData.edges.Count}, ヘックス数: {boardData.hexes.Count}");
     }
 
     private int GetProbabilityDots(int number)
